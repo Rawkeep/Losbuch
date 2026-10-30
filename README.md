@@ -11,6 +11,10 @@ Live: https://losbuch.f4991r.workers.dev
 
 ## Funktionen
 
+- **Jackpots live** in Kopfzeile und auf den Spielkarten; **Gewinnplan & Chancen** je Spiel (alle Klassen, Wahrscheinlichkeit, feste oder letzte Quote), „möglich bis …“ auf jedem offenen Schein
+- **Tippfeld zum Antippen** (1–49 / 1–50 + Eurozahlen / 1–70), mehrere Reihen, Quicktipp, ★ Lieblingszahlen, „↻ Wie zuletzt“
+- **Erinnerung am Ziehungstag** per Push (14:30 Uhr), wenn ein abonniertes Spiel noch keinen Schein hat; Ergebnisse teilen
+
 - **Scan**: Foto der Spielquittung → OCR (Tesseract, läuft komplett im Browser, keine Bild-Übertragung) → Tipps vorausgefüllt
 - **Automatischer Abend-Check**: Cloudflare Cron holt die offiziellen Zahlen (mehrere Quellen, Validierung), bewertet alle Scheine
 - **Web-Push**: Ergebnis je Ziehung, „GEWINN“-Hinweis ab Gewinnklasse 6 (LOTTO) / 8 (Eurojackpot) oder ab 100 €, Jackpot-Alarm ab 50 Mio. €
@@ -45,6 +49,8 @@ Worker nutzen dieselbe Datei.
 | `GET /api/draws?from=` · `POST /api/draws` | Ziehungen lesen / manuell oder extern erfassen |
 | `GET /api/push/vapid` · `POST/DELETE /api/push/subscribe` · `POST /api/push/test` | Web-Push |
 | `POST /api/run?force=1` | Abend-Check sofort ausführen |
+| `GET/POST /api/jackpots` | aktuelle Jackpots lesen / setzen |
+| `POST /api/remind` | Erinnerung „noch kein Schein“ sofort prüfen |
 | `GET /api/probe?game=lotto&date=` | Diagnose: was liefern die Quellen? |
 
 ### Deployment
@@ -54,7 +60,7 @@ Lokal: `npm test`, `npx wrangler dev`, `npx wrangler deploy`. Die D1-Datenbank `
 ist in `wrangler.jsonc` eingetragen; Schema liegt in `migrations/`. VAPID-Schlüssel werden beim
 ersten Push-Aufruf erzeugt und in D1 (`kv`) abgelegt – keine Secrets nötig.
 
-Cron (UTC): `15 7,19,20,21,22 * * *` – holt nur, was fällig ist, und nimmt Lücken der letzten
+Cron (UTC): `15 7,19,20,21,22 * * *` (Ziehungen) und `30 13 * * 2,3,5,6` (Erinnerung + Jackpots) – holt nur, was fällig ist, und nimmt Lücken der letzten
 14 Tage nach, sofern Scheine existieren.
 
 ### Quellen prüfen

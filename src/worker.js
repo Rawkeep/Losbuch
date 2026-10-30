@@ -1,6 +1,6 @@
 // Losbuch Worker: statische App + Sync-API + Ziehungsabruf (Cron) + Web-Push
 import R from '../public/rules.js';
-import { parseDraw, SOURCES, htmlToText } from './sources.js';
+import { parseDraw, parseJackpot, SOURCES, JACKPOT_SOURCES, htmlToText } from './sources.js';
 import { sendPush, getVapid } from './push.js';
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
@@ -35,12 +35,18 @@ async function api(req, env, ctx) {
   const acc = await account(req, env);
   if (!acc) return err('Nicht angemeldet', 401);
 
-  if (p === '/account' && m === 'GET') return json({ id: acc.id, name: acc.name, state: acc.state, active: JSON.parse(acc.active), updated_at: acc.updated_at });
+  if (p === '/account' && m === 'GET') return json({ id: acc.id, name: acc.name, state: acc.state, active: JSON.parse(acc.active), prefs: JSON.parse(acc.prefs || '{}'), updated_at: acc.updated_at });
   if (p === '/account' && m === 'PATCH') {
     const b = await req.json();
-    await env.DB.prepare('UPDATE accounts SET name=COALESCE(?,name), state=COALESCE(?,state), active=COALESCE(?,active), updated_at=? WHERE id=?')
-      .bind(b.name ?? null, b.state ?? null, b.active ? JSON.stringify(b.active) : null, now(), acc.id).run();
+    await env.DB.prepare('UPDATE accounts SET name=COALESCE(?,name), state=COALESCE(?,state), active=COALESCE(?,active), prefs=COALESCE(?,prefs), updated_at=? WHERE id=?')
+      .bind(b.name ?? null, b.state ?? null, b.active ? JSON.stringify(b.active) : null, b.prefs ? JSON.stringify(b.prefs) : null, now(), acc.id).run();
     return json({ ok: true });
+  }
+  if (p === '/jackpots' && m === 'GET') { const jp = await env.DB.prepare("SELECT value FROM kv WHERE key='jackpots'").first(); return json(jp ? JSON.parse(jp.value) : {}); }
+  if (p === '/jackpots' && m === 'POST') { // manuell/extern setzen: {lotto:"18 Mio. €", ej:"120 Mio. €"}
+    const b = await req.json(); const cur = await getJackpots(env);
+    for (const k of Object.keys(b)) if (R.G[k]) cur[k] = { amount: String(b[k]), at: now(), source: 'manuell' };
+    await setJackpots(env, cur); return json(cur);
   }
 
   if (p === '/sync') { // Pull: ?since=ts  |  Push: {docs:[…]}
@@ -59,7 +65,8 @@ async function api(req, env, ctx) {
     const docs = (await env.DB.prepare('SELECT coll, id, data, updated_at, deleted FROM docs WHERE account_id=? AND updated_at>? ORDER BY updated_at LIMIT 2000').bind(acc.id, since).all()).results
       .map(r => ({ coll: r.coll, id: r.id, data: JSON.parse(r.data), updated_at: r.updated_at, deleted: !!r.deleted }));
     const draws = (await env.DB.prepare('SELECT data FROM draws WHERE updated_at>? ORDER BY date DESC LIMIT 400').bind(since).all()).results.map(r => JSON.parse(r.data));
-    return json({ time: now(), docs, draws, account: { name: acc.name, state: acc.state, active: JSON.parse(acc.active), updated_at: acc.updated_at } });
+    const jp = await env.DB.prepare("SELECT value FROM kv WHERE key='jackpots'").first();
+    return json({ time: now(), docs, draws, jackpots: jp ? JSON.parse(jp.value) : {}, account: { name: acc.name, state: acc.state, active: JSON.parse(acc.active), prefs: JSON.parse(acc.prefs || '{}'), updated_at: acc.updated_at } });
   }
 
   if (p === '/draws' && m === 'GET') {
@@ -89,6 +96,7 @@ async function api(req, env, ctx) {
   if (p === '/push/test' && m === 'POST') { const n = await pushAccount(env, acc.id, { title: 'Losbuch', body: 'Push funktioniert. Ergebnisse kommen abends automatisch.', url: '/#heute' }); return json({ sent: n }); }
 
   if (p === '/run' && m === 'POST') { const log = await runFetch(env, { force: url.searchParams.get('force') === '1' }); return json(log); }
+  if (p === '/remind' && m === 'POST') return json(await remindAll(env));
   if (p === '/probe') { // Diagnose: was liefern die Quellen für ein Spiel?
     const game = url.searchParams.get('game') || 'lotto', date = url.searchParams.get('date') || todayBerlin();
     const out = [];
@@ -138,9 +146,45 @@ async function runFetch(env, { force = false } = {}) {
       newDraws.push(found); log.fetched.push(id);
     } else log.errors.push(id + ': keine Quelle lieferte die Ziehung');
   }
+  // Jackpots aktualisieren (aus neuen Ziehungen und eigenen Quellen)
+  try { await refreshJackpots(env, newDraws, log); } catch (e) { log.errors.push('jackpots ' + String(e).slice(0, 100)); }
   await env.DB.prepare("INSERT INTO kv (key, value) VALUES ('lastRun', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify({ at: now(), log })).run();
   if (newDraws.length) await notifyAll(env, newDraws);
   return log;
+}
+async function getJackpots(env) { const r = await env.DB.prepare("SELECT value FROM kv WHERE key='jackpots'").first(); return r ? JSON.parse(r.value) : {}; }
+async function setJackpots(env, jp) { await env.DB.prepare("INSERT INTO kv (key, value) VALUES ('jackpots', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(jp)).run(); }
+async function refreshJackpots(env, newDraws, log) {
+  const jp = await getJackpots(env);
+  for (const d of newDraws) if (d.jackpot) jp[d.game] = { amount: d.jackpot, at: now(), source: 'ziehung' };
+  for (const [game, srcs] of Object.entries(JACKPOT_SOURCES)) {
+    if (jp[game] && now() - jp[game].at < 6 * 3600e3) continue; // frisch genug
+    for (const src of srcs) {
+      try { const r = await fetch(src.url, { headers: UA, cf: { cacheTtl: 0 } }); if (!r.ok) continue; const amt = parseJackpot(htmlToText(await r.text()), game); if (amt) { jp[game] = { amount: amt, at: now(), source: 'auto:' + new URL(src.url).hostname }; break; } } catch (e) { log && log.errors.push('jackpot ' + src.url); }
+    }
+  }
+  await setJackpots(env, jp); return jp;
+}
+// Erinnerung am Ziehungstag: abonniertes Spiel, kein Schein, Push gewünscht
+async function remindAll(env) {
+  const today = todayBerlin(), dow = dowBerlin(today), jp = await getJackpots(env);
+  const due = R.GAMES.filter(g => g.days.includes(dow) && (g.kind === 'lotto' || g.kind === 'ej'));
+  if (!due.length) return { reminded: 0 };
+  const accounts = (await env.DB.prepare('SELECT id, active, state, prefs FROM accounts').all()).results; let n = 0;
+  for (const acc of accounts) {
+    const active = JSON.parse(acc.active || '{}'), prefs = JSON.parse(acc.prefs || '{}'); if (prefs.remind === false) continue;
+    for (const g of due) {
+      if (!active[g.id]) continue;
+      const key = 'remind_' + g.id + '_' + today; const done = await env.DB.prepare('SELECT 1 FROM notified WHERE account_id=? AND draw_id=?').bind(acc.id, key).first(); if (done) continue;
+      const has = await env.DB.prepare("SELECT 1 FROM docs WHERE account_id=? AND coll='tickets' AND deleted=0 AND json_extract(data,'$.game')=? AND json_extract(data,'$.date')=?").bind(acc.id, g.id, today).first();
+      if (has) continue;
+      const cut = R.cutoff(g.id, dow, acc.state) || '';
+      const sent = await pushAccount(env, acc.id, { title: g.name + ' heute' + (jp[g.id] ? ' – ' + jp[g.id].amount + ' im Jackpot' : ''), body: 'Noch kein Schein eingetragen.' + (cut ? ' Annahmeschluss ' + cut + ' Uhr.' : ''), url: '/#scheine', tag: key });
+      if (sent) n++;
+      await env.DB.prepare('INSERT OR IGNORE INTO notified (account_id, draw_id) VALUES (?,?)').bind(acc.id, key).run();
+    }
+  }
+  return { reminded: n };
 }
 
 // ---------- Auswerten + Push ----------
@@ -193,6 +237,10 @@ export default {
     }
     return env.ASSETS.fetch(req);
   },
-  async scheduled(event, env, ctx) { ctx.waitUntil(runFetch(env)); },
+  async scheduled(event, env, ctx) {
+    const hourUtc = new Date(event.scheduledTime).getUTCHours();
+    if (hourUtc === 13 || hourUtc === 14) ctx.waitUntil(remindAll(env).then(() => refreshJackpots(env, [], null)));
+    else ctx.waitUntil(runFetch(env));
+  },
 };
 const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };

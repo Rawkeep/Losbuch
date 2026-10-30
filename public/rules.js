@@ -60,7 +60,7 @@
   // ---------- Hilfen ----------
   const inter = (a, b) => (a || []).filter(x => (b || []).includes(x));
   function sufMatch(a, b) { a = String(a || ''); b = String(b || ''); let n = 0; while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++; return n; }
-  const euro = v => typeof v === 'number' ? v.toFixed(2).replace('.', ',') + ' €' : String(v);
+  const euro = v => typeof v === 'number' ? v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : String(v);
   function quota(draw, gk, fixed) { // bevorzugt offizielle Quote aus der Ziehung, sonst fester Gewinnplan
     const q = draw && draw.quoten && draw.quoten[gk]; if (q != null) return typeof q === 'number' ? euro(q) : String(q);
     const f = fixed && fixed[gk]; return f == null ? null : (typeof f === 'number' ? euro(f) : f);
@@ -154,5 +154,38 @@
     return { byGame: Object.values(by), all, roi: all.stake ? (all.won - all.stake) / all.stake : null };
   }
 
-  return { GAMES, G, CUTOFF, cutoff, KENO_PLAN, FIXED, evaluate, won, winnings, isBigWin, validateTicket, validateDraw, nextDraw, claimDeadline, stats, sufMatch, iso, euro };
+  // ---------- Gewinnplan mit Chancen ----------
+  const ODDS = {
+    lotto: { 1: 139838160, 2: 15537573, 3: 542008, 4: 60223, 5: 10324, 6: 1147, 7: 567, 8: 63, 9: 76 },
+    ej: { 1: 139838160, 2: 6991908, 3: 3107515, 4: 621503, 5: 31075, 6: 14125, 7: 13811, 8: 985, 9: 706, 10: 314, 11: 188, 12: 49 },
+  };
+  const LOTTO_COND = { 1: '6 Richtige + Superzahl', 2: '6 Richtige', 3: '5 Richtige + SZ', 4: '5 Richtige', 5: '4 Richtige + SZ', 6: '4 Richtige', 7: '3 Richtige + SZ', 8: '3 Richtige', 9: '2 Richtige + SZ' };
+  const EJ_COND = { 1: '5 + 2', 2: '5 + 1', 3: '5 + 0', 4: '4 + 2', 5: '4 + 1', 6: '3 + 2', 7: '4 + 0', 8: '2 + 2', 9: '3 + 1', 10: '3 + 0', 11: '1 + 2', 12: '2 + 1' };
+  const fmtOdds = n => '1 : ' + Math.round(n).toLocaleString('de-DE');
+  // rows: {gk, cond, odds, amount (Text), fixed (bool)} – amount aus fester Quote, sonst aus der letzten Ziehung (lastDraw.quoten)
+  function gewinnplan(gameId, lastDraw, jackpot) {
+    const g = G[gameId]; if (!g) return [];
+    const q = (lastDraw && lastDraw.quoten) || {};
+    const rows = [];
+    if (g.kind === 'lotto') for (let k = 1; k <= 9; k++) rows.push({ gk: k, cond: LOTTO_COND[k], odds: fmtOdds(ODDS.lotto[k]), amount: k === 1 && jackpot ? jackpot + ' (Jackpot)' : FIXED.lotto[k] != null ? euro(FIXED.lotto[k]) : q[k] ? q[k] + ' (zuletzt)' : 'variabel', fixed: FIXED.lotto[k] != null });
+    else if (g.kind === 'ej') for (let k = 1; k <= 12; k++) rows.push({ gk: k, cond: EJ_COND[k] + ' Richtige', odds: fmtOdds(ODDS.ej[k]), amount: k === 1 && jackpot ? jackpot + ' (Jackpot)' : q[k] ? q[k] + ' (zuletzt)' : 'variabel', fixed: false });
+    else if (g.kind === 'keno') for (let typ = 10; typ >= 2; typ--) rows.push({ gk: typ, cond: 'Typ ' + typ, odds: Object.entries(KENO_PLAN[typ]).sort((a, b) => b[0] - a[0]).map(([h, f]) => h + ' Treffer: ' + f + '×').join(', '), amount: 'bis ' + euro(KENO_PLAN[typ][typ] * 10) + ' (10 € Einsatz)', fixed: true });
+    else if (g.id === 'gs') for (let k = 7; k >= 1; k--) rows.push({ gk: k, cond: k + ' Endziffer' + (k > 1 ? 'n' : ''), odds: fmtOdds(Math.pow(10, k) / (k >= 6 ? 2 : 1)), amount: typeof FIXED.gs[k] === 'number' ? euro(FIXED.gs[k]) : FIXED.gs[k], fixed: true });
+    return rows;
+  }
+  const EXTRA_PLAN = {
+    spiel77: Object.entries(FIXED.spiel77).map(([k, v]) => ({ gk: +k, cond: (8 - k) + ' Endziffer' + (8 - k > 1 ? 'n' : ''), odds: fmtOdds(Math.pow(10, 8 - k)), amount: k === '1' ? euro(v) + ' + Jackpot' : euro(v), fixed: true })),
+    super6: Object.entries(FIXED.super6).map(([k, v]) => ({ gk: +k, cond: (7 - k) + ' Endziffer' + (7 - k > 1 ? 'n' : ''), odds: fmtOdds(Math.pow(10, 7 - k)), amount: euro(v), fixed: true })),
+    plus5: Object.entries(FIXED.plus5).map(([k, v]) => ({ gk: +k, cond: (6 - k) + ' Endziffer' + (6 - k > 1 ? 'n' : ''), odds: fmtOdds(Math.pow(10, 6 - k)), amount: euro(v), fixed: true })),
+  };
+  // Höchstmöglicher Gewinn eines Scheins als Text
+  function maxWin(t, jackpots) {
+    const g = G[t.game]; const jp = jackpots && jackpots[t.game];
+    if (g.kind === 'lotto' || g.kind === 'ej') return jp ? jp : 'Jackpot';
+    if (g.kind === 'keno') { const typ = Math.max(...(t.tips || []).map(x => x.n.length), 2); const stake = +t.stake > 0 && t.tips.length ? +t.stake / t.tips.length : 1; return euro(KENO_PLAN[typ][typ] * stake); }
+    if (g.id === 'gs') return FIXED.gs[7];
+    return 'je nach Gewinnklasse';
+  }
+
+  return { GAMES, G, CUTOFF, cutoff, KENO_PLAN, FIXED, ODDS, evaluate, won, winnings, isBigWin, validateTicket, validateDraw, nextDraw, claimDeadline, stats, sufMatch, iso, euro, gewinnplan, EXTRA_PLAN, maxWin };
 });

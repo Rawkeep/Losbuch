@@ -13,7 +13,7 @@ function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('sh
 
 // ---------- Speicher: IndexedDB mit Collections tickets/results/groups/draws + settings ----------
 const COLLS = ['tickets', 'results', 'groups', 'draws'];
-const S = { tickets: [], results: [], groups: [], draws: [], settings: { active: { lotto: true, ej: true }, state: '', name: '', token: '', lastSync: 0, onboarded: false, api: '' } };
+const S = { tickets: [], results: [], groups: [], draws: [], settings: { active: { lotto: true, ej: true }, state: '', name: '', token: '', lastSync: 0, onboarded: false, api: '', jackpots: {}, prefs: { remind: true, favorites: {}, lastStake: {}, lastGroup: '' } } };
 let idb = null;
 function openDb() {
   return new Promise((res, rej) => {
@@ -60,15 +60,16 @@ async function sync() {
       else await put(d.coll, Object.assign({ id: d.id }, d.data, { updated_at: d.updated_at }), { local: true });
     }
     for (const d of j.draws) await put('draws', d, { local: true });
-    if (j.account && j.account.updated_at > (S.settings.accountUpdated || 0)) { S.settings.active = j.account.active || S.settings.active; S.settings.state = j.account.state || S.settings.state; S.settings.name = j.account.name || S.settings.name; S.settings.accountUpdated = j.account.updated_at; }
+    if (j.jackpots) S.settings.jackpots = j.jackpots;
+    if (j.account && j.account.updated_at > (S.settings.accountUpdated || 0)) { S.settings.active = j.account.active || S.settings.active; S.settings.state = j.account.state || S.settings.state; S.settings.name = j.account.name || S.settings.name; if (j.account.prefs && Object.keys(j.account.prefs).length) S.settings.prefs = Object.assign(S.settings.prefs, j.account.prefs); S.settings.accountUpdated = j.account.updated_at; }
     S.settings.lastSync = j.time; await persistSettings();
     setStatus('on', 'Cloud-Sync');
-    const n = await runChecks(); if (n) toast(n + ' Schein(e) geprüft');
+    const n = await runChecks(); if (n) { toast(n + ' Schein(e) geprüft'); if (live('results').some(r => !r.seen && r.won)) try { navigator.vibrate && navigator.vibrate([60, 40, 60]); } catch (e) {} }
     route(true);
   } catch (e) { setStatus('', 'offline'); }
   syncing = false;
 }
-async function pushAccount() { if (!S.settings.token) return; await fetch(API() + '/account', { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + S.settings.token }, body: JSON.stringify({ active: S.settings.active, state: S.settings.state, name: S.settings.name }) }).catch(() => {}); }
+async function pushAccount() { if (!S.settings.token) return; await fetch(API() + '/account', { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + S.settings.token }, body: JSON.stringify({ active: S.settings.active, state: S.settings.state, name: S.settings.name, prefs: S.settings.prefs }) }).catch(() => {}); }
 
 // ---------- Auswertung ----------
 let checking = false;
@@ -119,20 +120,30 @@ V.heute = () => {
   h += act.map(g => { const nd = R.nextDraw(g), cnt = open.filter(t => t.game === g.id && t.date === nd).length, days = Math.round((new Date(nd + 'T12:00') - new Date(today + 'T12:00')) / 864e5);
     const dow = new Date(nd + 'T12:00').getDay(), cut = R.cutoff(g.id, dow, S.settings.state);
     const last = live('draws').filter(d => d.game === g.id).sort((a, b) => b.date.localeCompare(a.date))[0];
+    const jp = jackpotOf(g.id, last);
+    const lastT = live('tickets').filter(t => t.game === g.id).sort((a, b) => b.date.localeCompare(a.date))[0];
     return `<div class="card"><div class="row"><b>${g.name}</b><span class="pill">${days === 0 ? 'heute' : days === 1 ? 'morgen' : 'in ' + days + ' Tagen'}</span><span class="grow"></span><span class="muted">${fmtD(nd)} · ${g.drawTime[dow] || g.drawTime.all}</span></div>
-      <div class="row"><span class="muted">${cnt ? cnt + ' Schein(e) für diese Ziehung' : 'Noch kein Schein für diese Ziehung'}${cut ? ' · Annahmeschluss ' + cut : ''}${last && last.jackpot ? ' · Jackpot ' + esc(last.jackpot) : ''}</span><span class="grow"></span><a class="btn" href="#scheine" data-new="${g.id}">+ Schein</a></div></div>`; }).join('');
+      ${jp ? `<div class="jp"><span class="jpv">${esc(jp)}</span><span class="jpl">im Jackpot</span></div>` : ''}
+      <div class="row"><span class="muted">${cnt ? cnt + ' Schein(e) für diese Ziehung' : 'Noch kein Schein für diese Ziehung'}${cut ? ' · Annahmeschluss ' + cut : ''}</span><span class="grow"></span>${lastT && !cnt ? `<button class="s" data-repeat="${lastT.id}">↻ Wie zuletzt</button>` : ''}<a class="btn ${cnt ? '' : 'p'}" href="#scheine" data-new="${g.id}">+ Schein</a></div></div>`; }).join('');
   h += '</div>';
   const st = R.stats(live('tickets'), live('results'));
   h += `<h2>Bilanz</h2><div class="tiles"><div class="tile"><div class="v">${st.all.tickets}</div><div class="l">Scheine</div></div><div class="tile"><div class="v">${st.all.wins}</div><div class="l">Gewinne</div></div><div class="tile"><div class="v num">${euro(st.all.won)}</div><div class="l">Gewonnen</div></div><div class="tile"><div class="v num">${euro(st.all.stake)}</div><div class="l">Einsatz</div></div></div>`;
   return h;
 };
+function jackpotOf(gameId, lastDraw) { const j = S.settings.jackpots && S.settings.jackpots[gameId]; if (j && j.amount) return j.amount; return lastDraw && lastDraw.jackpot ? lastDraw.jackpot : ''; }
+function ticker() { const parts = ['ej', 'lotto'].map(id => { const j = jackpotOf(id, live('draws').filter(d => d.game === id).sort((a, b) => b.date.localeCompare(a.date))[0]); return j ? (id === 'ej' ? 'EJ ' : 'Lotto ') + j.replace(' Mio. €', ' Mio.') : ''; }).filter(Boolean); const el = document.querySelector('header .sub'); if (el) el.textContent = parts.length ? parts.join(' · ') + ' im Jackpot' : 'Lotterie-Begleiter · Deutschland'; }
 function resCard(r) {
   const t = S.tickets.find(x => x.id === r.ticket), d = S.draws.find(x => x.id === r.draw); if (!t || !d) return '';
   const grp = t.group && live('groups').find(g => g.id === t.group);
   return `<div class="card ${r.won ? 'win' : ''}"><div class="row"><span class="pill ${r.won ? 'win' : ''}">${r.won ? (r.amount ? euro(r.amount) : 'Gewinn') : 'Kein Gewinn'}</span><b>${G[t.game].name}</b><span class="muted">${fmtD(d.date)}</span>${t.label ? '<span class="muted">· ' + esc(t.label) + '</span>' : ''}</div>${tipHtml(t, r)}
   ${r.hits.map(x => `<div class="row"><span class="muted" style="min-width:90px">${esc(x.label)}</span><span>${esc(x.text)}</span></div>`).join('')}
   ${grp && r.won ? '<div class="muted">' + shareText(grp, r.amount) + '</div>' : ''}
-  ${r.won ? '<div class="hint">Quote beim Anbieter gegenprüfen; Frist zur Abholung siehe „Gewinne einlösen“.</div>' : ''}</div>`;
+  <div class="row">${r.won ? '<span class="hint grow">Quote beim Anbieter gegenprüfen; Frist siehe „Gewinne einlösen“.</span>' : '<span class="grow"></span>'}<button class="s" data-share="${r.id}">Teilen</button></div></div>`;
+}
+function shareResult(r) {
+  const t = S.tickets.find(x => x.id === r.ticket), d = S.draws.find(x => x.id === r.draw); if (!t || !d) return;
+  const text = `${G[t.game].name} ${fmtD(d.date)}: ${r.hits.map(h => h.text).join('; ')}${r.amount ? ' – ' + euro(r.amount) : ''} (Losbuch)`;
+  if (navigator.share) navigator.share({ title: 'Losbuch', text }).catch(() => {}); else navigator.clipboard.writeText(text).then(() => toast('In die Zwischenablage kopiert')).catch(() => toast(text));
 }
 function shareText(grp, amount) { const tot = grp.members.reduce((a, m) => a + (+m.share || 0), 0) || 1; return 'Tippgemeinschaft ' + esc(grp.name) + ': ' + grp.members.map(m => esc(m.name) + ' ' + (amount ? euro(amount * (+m.share || 0) / tot) : Math.round(100 * (+m.share || 0) / tot) + ' %')).join(' · '); }
 function tipHtml(t, r) {
@@ -143,11 +154,18 @@ function tipHtml(t, r) {
   return h + (ex.length ? '<div class="muted num">' + esc(ex.join(' · ')) + '</div>' : '');
 }
 
-V.spiele = () => `<h2>Welche Spiele begleite ich?</h2><div class="stack">${GAMES.map(g => `<div class="card"><div class="game"><label class="check" aria-label="${g.name} abonnieren"><input type="checkbox" data-act="${g.id}" ${S.settings.active[g.id] ? 'checked' : ''}></label><div><h3>${g.name}</h3><div class="sched">${g.days.length === 7 ? 'täglich' : g.days.map(d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d]).join(' & ')} · ${Object.values(g.drawTime).join(' / ')} · ${g.priceLabel}</div></div><span class="pill">${g.kind === 'suffix' ? 'Losnummer' : 'Zahlenlotto'}</span></div><div class="muted">${g.rule}${g.extras.length ? ' Zusatz: ' + g.extras.join(', ') + '.' : ''}</div></div>`).join('')}</div>
+V.spiele = () => `<h2>Welche Spiele begleite ich?</h2><div class="stack">${GAMES.map(g => `<div class="card"><div class="game"><label class="check" aria-label="${g.name} abonnieren"><input type="checkbox" data-act="${g.id}" ${S.settings.active[g.id] ? 'checked' : ''}></label><div><h3>${g.name}</h3><div class="sched">${g.days.length === 7 ? 'täglich' : g.days.map(d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d]).join(' & ')} · ${Object.values(g.drawTime).join(' / ')} · ${g.priceLabel}</div></div><span class="pill">${g.kind === 'suffix' ? 'Losnummer' : 'Zahlenlotto'}</span></div><div class="muted">${g.rule}${g.extras.length ? ' Zusatz: ' + g.extras.join(', ') + '.' : ''}</div>${planHtml(g)}</div>`).join('')}</div>
   <p class="hint">Jackpot-Alarm: Für abonnierte Spiele meldet der Abend-Check Jackpots ab 50 Mio. €, wenn du noch keinen Schein hast. Annahmeschluss richtet sich nach deinem Bundesland (Mehr → Einstellungen).</p>
   <h2>Tippgemeinschaften</h2><div class="stack">${live('groups').map(g => `<div class="card"><div class="row"><b>${esc(g.name)}</b><span class="grow"></span><button class="s" data-gdel="${g.id}">✕</button></div><div class="muted">${g.members.map(m => esc(m.name) + ' (' + m.share + ')').join(' · ')}</div></div>`).join('') || '<div class="empty">Keine Tippgemeinschaft. Lege eine an, um Gewinne nach Anteilen aufzuteilen.</div>'}
   <div class="card"><h3>Neue Tippgemeinschaft</h3><label class="f">Name<input id="gName" placeholder="z. B. Büro-Runde"></label><label class="f">Mitglieder und Anteile (eine Zeile je Person: Name, Anteile)<textarea id="gMembers" placeholder="Diila, 2&#10;Sam, 1&#10;Ama, 1"></textarea></label><div><button class="p" id="gSave">Speichern</button></div></div></div>`;
 
+function planHtml(g) {
+  const last = live('draws').filter(d => d.game === g.id).sort((a, b) => b.date.localeCompare(a.date))[0];
+  const rows = R.gewinnplan(g.id, last, jackpotOf(g.id, last)); if (!rows.length) return '';
+  const tbl = rs => `<div class="twrap"><table class="t"><thead><tr><th>Klasse</th><th>Bedingung</th><th>Chance</th><th class="n">Gewinn</th></tr></thead><tbody>${rs.map(r => `<tr><td>${r.gk}</td><td>${esc(r.cond)}</td><td class="muted">${esc(r.odds)}</td><td class="n">${esc(r.amount)}</td></tr>`).join('')}</tbody></table></div>`;
+  const extras = g.kind === 'lotto' ? [['Spiel 77', R.EXTRA_PLAN.spiel77], ['SUPER 6', R.EXTRA_PLAN.super6]] : g.kind === 'keno' ? [['plus 5', R.EXTRA_PLAN.plus5]] : [];
+  return `<details><summary class="muted">Gewinnplan &amp; Chancen${last && last.quoten ? ' (Quoten vom ' + fmtD(last.date) + ')' : ''}</summary>${tbl(rows)}${extras.map(([n, rs]) => '<div class="muted" style="margin-top:8px"><b>' + n + '</b></div>' + tbl(rs)).join('')}</details>`;
+}
 V.scheine = () => {
   const act = GAMES.filter(g => S.settings.active[g.id]);
   let h = `<h2>Neuer Schein</h2><div class="card" id="newform">
@@ -157,16 +175,17 @@ V.scheine = () => {
     <div class="row"><label class="f grow">Spiel<select id="fGame">${(act.length ? act : GAMES).map(g => `<option value="${g.id}">${g.name}</option>`).join('')}</select></label><label class="f">Ziehung<input type="date" id="fDate"></label><label class="f" style="width:110px">Einsatz €<input type="number" step="0.01" inputmode="decimal" id="fStake" placeholder="0,00"></label></div>
     <div id="fFields"></div>
     <div class="row"><label class="f grow">Notiz<input id="fLabel" placeholder="z. B. Kiosk Bahnhofstr."></label><label class="f" style="width:150px">Dauerschein<select id="fWeeks"><option value="1">nur diese Ziehung</option><option value="2">2 Ziehungen</option><option value="4">4 Ziehungen</option><option value="8">8 Ziehungen</option></select></label>${live('groups').length ? `<label class="f" style="width:150px">Tippgemeinschaft<select id="fGroup"><option value="">– keine –</option>${live('groups').map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></label>` : ''}</div>
-    <div class="row"><button class="p" id="fSave">Schein speichern</button><button id="fQuick">Quicktipp</button></div></div>`;
+    <div class="row"><button class="p" id="fSave">Schein speichern</button></div></div>`;
   const today = todayIso(), list = live('tickets').sort((a, b) => b.date.localeCompare(a.date) || b.updated_at - a.updated_at);
   h += `<h2>Meine Scheine <small>${list.length}</small></h2><div class="stack">${list.length ? list.slice(0, 60).map(t => { const r = S.results.find(x => x.ticket === t.id); const st = r ? (r.won ? '<span class="pill win">' + (r.amount ? euro(r.amount) : 'Gewinn') + '</span>' : '<span class="pill">Geprüft</span>') : (t.date < today ? '<span class="pill due">Ergebnis fehlt</span>' : '<span class="pill ok">Läuft</span>');
-    return `<div class="card ${r && r.won ? 'win' : ''}"><div class="row">${st}<b>${G[t.game].name}</b><span class="muted">${fmtD(t.date)}</span><span class="grow"></span><span class="num muted">${t.stake ? euro(t.stake) : ''}</span><button class="s" data-del="${t.id}" aria-label="Schein löschen">✕</button></div>${tipHtml(t, r)}${t.label ? '<div class="muted">' + esc(t.label) + '</div>' : ''}</div>`; }).join('') + (list.length > 60 ? '<div class="muted">… ältere Scheine in der Bilanz enthalten.</div>' : '') : '<div class="empty">Noch keine Scheine. Scanne die Spielquittung oder trage die Zahlen oben ein.</div>'}</div>`;
+    const mw = !r && t.date >= today ? R.maxWin(t, Object.fromEntries(Object.entries(S.settings.jackpots || {}).map(([k, v]) => [k, v.amount]))) : '';
+    return `<div class="card ${r && r.won ? 'win' : ''}"><div class="row">${st}<b>${G[t.game].name}</b><span class="muted">${fmtD(t.date)}</span><span class="grow"></span><span class="num muted">${t.stake ? euro(t.stake) : ''}</span><button class="s" data-repeat="${t.id}" aria-label="Nochmal spielen" title="Nochmal spielen">↻</button><button class="s" data-del="${t.id}" aria-label="Schein löschen">✕</button></div>${tipHtml(t, r)}<div class="row">${t.label ? '<span class="muted">' + esc(t.label) + '</span>' : ''}${mw ? '<span class="muted">· möglich bis ' + esc(mw) + '</span>' : ''}</div></div>`; }).join('') + (list.length > 60 ? '<div class="muted">… ältere Scheine in der Bilanz enthalten.</div>' : '') : '<div class="empty">Noch keine Scheine. Scanne die Spielquittung oder trage die Zahlen oben ein.</div>'}</div>`;
   return h;
 };
 function fieldsFor(id) {
   const g = G[id];
   if (g.kind === 'suffix') return '<label class="f">Losnummer<input id="fLos" inputmode="numeric" maxlength="12" placeholder="7-stellig"></label>';
-  let h = `<label class="f">Tipps (eine Zeile je Tipp${g.kind === 'ej' ? ', Eurozahlen nach „|“' : g.kind === 'keno' ? ', 2–10 Zahlen' : ''})<textarea id="fTips" placeholder="${g.kind === 'ej' ? '3 17 22 38 45 | 4 9' : g.kind === 'keno' ? '5 12 19 27 33 41 56 68' : '3 11 19 27 34 42'}"></textarea></label>`;
+  let h = `<div id="pk"></div><details class="alt"><summary class="muted">Als Text eingeben</summary><label class="f">Tipps (eine Zeile je Tipp${g.kind === 'ej' ? ', Eurozahlen nach „|“' : g.kind === 'keno' ? ', 2–10 Zahlen' : ''})<textarea id="fTips" placeholder="${g.kind === 'ej' ? '3 17 22 38 45 | 4 9' : g.kind === 'keno' ? '5 12 19 27 33 41 56 68' : '3 11 19 27 34 42'}"></textarea></label></details>`;
   if (g.kind === 'lotto') h += '<div class="row"><label class="f" style="width:110px">Superzahl<input id="fSz" inputmode="numeric" maxlength="1" placeholder="0–9"></label><label class="f grow">Losnummer<input id="fLos" inputmode="numeric" maxlength="7" placeholder="7-stellig"></label><label class="check"><input type="checkbox" id="fS77">Spiel 77</label><label class="check"><input type="checkbox" id="fS6">SUPER 6</label></div>';
   if (g.kind === 'keno') h += '<div class="row"><label class="f grow">Losnummer<input id="fLos" inputmode="numeric" maxlength="7" placeholder="7-stellig"></label><label class="check"><input type="checkbox" id="fP5">plus 5</label></div>';
   return h;
@@ -204,9 +223,42 @@ V.einstellungen = () => `<h2>Sync &amp; Geräte</h2><div class="card">
   ${S.settings.token ? `<p class="muted" style="margin:0"><b>Cloud-Sync aktiv.</b> Alle Geräte mit diesem Code sehen dieselben Scheine. Abend-Check und Push laufen auf dem Server.</p><div class="row"><span class="muted">Kopplungscode</span><code class="num" id="tokenBox" style="letter-spacing:.06em;word-break:break-all">${esc(S.settings.token)}</code><button class="s" id="copyToken">Kopieren</button></div><div class="hint">Den Code auf dem zweiten Gerät beim Start unter „Gerät koppeln“ eingeben. Wer den Code hat, sieht deine Scheine – nicht weitergeben.</div><div class="row"><button class="s" id="syncNow">Jetzt synchronisieren</button><button class="s" id="logout">Gerät trennen</button></div>`
     : `<p class="muted" style="margin:0"><b>Nur lokal.</b> Daten liegen in diesem Browser. Mit einem Konto bekommst du Sync, automatische Ziehungen und Push.</p><div class="row"><button class="p" id="obNew">Konto anlegen</button><input id="obToken" class="num" placeholder="Kopplungscode"><button id="obPair">Koppeln</button></div>`}</div>
   <h2>Benachrichtigungen</h2><div class="card">${S.settings.token ? `<p class="muted" style="margin:0">Push aufs Gerät nach jeder Ziehung, zu der du Scheine hast, und bei Jackpots ab 50 Mio. €.</p><div class="row"><button class="p" id="pushOn">${S.settings.pushOn ? 'Push erneuern' : 'Push aktivieren'}</button><button id="pushTest" ${S.settings.pushOn ? '' : 'disabled'}>Testnachricht</button></div><div class="hint" id="pushMsg">${S.settings.pushOn ? 'Aktiv auf diesem Gerät.' : 'Auf iPhone/iPad erst „Zum Home-Bildschirm“ hinzufügen, dann hier aktivieren.'}</div>` : '<div class="muted">Erst Konto anlegen.</div>'}</div>
-  <h2>Einstellungen</h2><div class="card"><label class="f">Bundesland (Annahmeschluss)<select id="setState"><option value="">– nicht gesetzt –</option>${Object.entries(STATES).map(([k, v]) => `<option value="${k}" ${S.settings.state === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><label class="f">Name (optional)<input id="setName" value="${esc(S.settings.name)}"></label><div><button class="s" id="setSave">Speichern</button></div></div>
+  <h2>Einstellungen</h2><div class="card"><label class="f">Bundesland (Annahmeschluss)<select id="setState"><option value="">– nicht gesetzt –</option>${Object.entries(STATES).map(([k, v]) => `<option value="${k}" ${S.settings.state === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><label class="f">Name (optional)<input id="setName" value="${esc(S.settings.name)}"></label><label class="check"><input type="checkbox" id="setRemind" ${S.settings.prefs.remind !== false ? 'checked' : ''}>Am Ziehungstag erinnern, wenn noch kein Schein eingetragen ist (Push, 14:30 Uhr)</label><div><button class="s" id="setSave">Speichern</button></div></div>
   <h2>Sicherung</h2><div class="card"><div class="row"><button id="sExport">Sicherungscode erzeugen</button><button id="sCopy">Kopieren</button></div><textarea id="sBox" placeholder="Hier erscheint der Sicherungscode – oder einen Code zum Einspielen einfügen."></textarea><div class="row"><button id="sImport">Code einspielen</button><button id="sWipe">Alles löschen</button></div><div id="sMsg" class="hint"></div></div>
-  <p class="hint">Losbuch · Version 2.0 · <a href="https://github.com/Rawkeep/Losbuch" target="_blank" rel="noopener">Quellcode</a> · Teilnahme ab 18 · Hilfe bei Spielsucht: BZgA 0800 1 37 27 00</p>`;
+  <p class="hint">Losbuch · Version 2.1 · <a href="https://github.com/Rawkeep/Losbuch" target="_blank" rel="noopener">Quellcode</a> · Teilnahme ab 18 · Hilfe bei Spielsucht: BZgA 0800 1 37 27 00</p>`;
+
+// ---------- Zahlen-Tippfeld (antippen statt tippen) ----------
+const PK = { rows: [{ n: [], e: [] }], i: 0 };
+const pkSpec = g => g.kind === 'lotto' ? { max: 49, need: 6, emax: 0, eneed: 0 } : g.kind === 'ej' ? { max: 50, need: 5, emax: 12, eneed: 2 } : { max: 70, need: 10, min: 2, emax: 0, eneed: 0 };
+function pkFromText() { const ta = $('fTips'); if (!ta) return; const rows = parseTips(ta.value); PK.rows = rows.length ? rows : [{ n: [], e: [] }]; PK.i = Math.min(PK.i, PK.rows.length - 1); }
+function pkToText() { const ta = $('fTips'); if (ta) ta.value = PK.rows.filter(r => r.n.length).map(r => r.n.join(' ') + (r.e.length ? ' | ' + r.e.join(' ') : '')).join('\n'); }
+function pkRender() {
+  const el = $('pk'), g = G[$('fGame').value]; if (!el || g.kind === 'suffix') return;
+  const sp = pkSpec(g), row = PK.rows[PK.i];
+  const rowsHtml = PK.rows.map((r, i) => `<button type="button" class="pkrow ${i === PK.i ? 'on' : ''}" data-pkrow="${i}" aria-label="Reihe ${i + 1}"><span class="muted">${i + 1}</span> ${r.n.length ? r.n.join(' ') : '<span class="muted">leer</span>'}${r.e.length ? ' <span class="muted">+</span> ' + r.e.join(' ') : ''}${PK.rows.length > 1 ? `<span class="x" data-pkdel="${i}" role="button" aria-label="Reihe löschen">✕</span>` : ''}</button>`).join('');
+  const grid = (max, sel, cls) => `<div class="grid ${cls}">${Array.from({ length: max }, (_, k) => k + 1).map(n => `<button type="button" class="ball ${sel.includes(n) ? 'hit' : ''}" data-pk="${cls}:${n}">${n}</button>`).join('')}</div>`;
+  const fav = (S.settings.prefs.favorites || {})[g.id];
+  el.innerHTML = `<div class="pkrows">${rowsHtml}</div>
+    <div class="row" style="justify-content:space-between"><span class="muted">${g.kind === 'keno' ? `Reihe ${PK.i + 1}: ${row.n.length} von 2–10 Zahlen (Typ ${row.n.length || '–'})` : `Reihe ${PK.i + 1}: ${row.n.length} / ${sp.need}${sp.eneed ? ' + ' + row.e.length + ' / ' + sp.eneed + ' Eurozahlen' : ''}`}</span><span class="row"><button type="button" class="s" data-pkact="quick">Quicktipp</button><button type="button" class="s" data-pkact="clear">Leeren</button><button type="button" class="s" data-pkact="add">+ Reihe</button></span></div>
+    ${grid(sp.max, row.n, 'n')}${sp.emax ? '<div class="muted">Eurozahlen</div>' + grid(sp.emax, row.e, 'e') : ''}
+    <div class="row"><button type="button" class="s" data-pkact="favsave" title="Aktuelle Reihen als Lieblingszahlen merken">★ Merken</button>${fav && fav.length ? '<button type="button" class="s" data-pkact="favload">★ Lieblingszahlen laden</button>' : ''}</div>`;
+  pkToText();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-pk],[data-pkrow],[data-pkdel],[data-pkact]'); if (!b) return;
+  const g = G[$('fGame').value], sp = pkSpec(g), row = PK.rows[PK.i];
+  if (b.dataset.pkdel != null) { e.stopPropagation(); PK.rows.splice(+b.dataset.pkdel, 1); PK.i = Math.max(0, Math.min(PK.i, PK.rows.length - 1)); }
+  else if (b.dataset.pkrow != null) PK.i = +b.dataset.pkrow;
+  else if (b.dataset.pk) { const [cls, v] = b.dataset.pk.split(':'); const n = +v, arr = cls === 'n' ? row.n : row.e, lim = cls === 'n' ? sp.need : sp.eneed; const k = arr.indexOf(n); if (k >= 0) arr.splice(k, 1); else if (arr.length < lim) { arr.push(n); arr.sort((a, c) => a - c); try { navigator.vibrate && navigator.vibrate(8); } catch (_) {} } else toast('Reihe ist voll – „+ Reihe“ für einen weiteren Tipp');
+    if (g.kind !== 'keno' && row.n.length === sp.need && row.e.length === sp.eneed && PK.i === PK.rows.length - 1 && PK.rows.length < 12) { /* Reihe komplett → nächste vorbereiten */ } }
+  else if (b.dataset.pkact === 'add') { if (!row.n.length) { toast('Erst die aktuelle Reihe füllen'); return; } PK.rows.push({ n: [], e: [] }); PK.i = PK.rows.length - 1; }
+  else if (b.dataset.pkact === 'clear') { row.n = []; row.e = []; }
+  else if (b.dataset.pkact === 'quick') { const t = quick(g.kind, g.kind === 'keno' ? (row.n.length || 8) : 0); const [a, c] = t.split('|'); row.n = nums(a); row.e = c ? nums(c) : []; }
+  else if (b.dataset.pkact === 'favsave') { S.settings.prefs.favorites[g.id] = PK.rows.filter(r => r.n.length).map(r => ({ n: [...r.n], e: [...r.e] })); persistSettings(); pushAccount(); toast('Als Lieblingszahlen gemerkt'); }
+  else if (b.dataset.pkact === 'favload') { PK.rows = (S.settings.prefs.favorites[g.id] || []).map(r => ({ n: [...r.n], e: [...r.e] })); PK.i = 0; }
+  pkRender();
+});
+function pkReset(rows) { PK.rows = rows && rows.length ? rows.map(r => ({ n: [...r.n], e: [...(r.e || [])] })) : [{ n: [], e: [] }]; PK.i = 0; }
 
 // ---------- Scan ----------
 let ocrWorker = null;
@@ -253,7 +305,7 @@ async function scan(file) {
     const game = $('fGame').value, found = numbersFromText(data.text, game);
     if (G[game].kind === 'suffix') { if (found.los) { $('fLos').value = found.los; msg.textContent = 'Losnummer erkannt – bitte prüfen.'; } else msg.textContent = 'Keine Losnummer erkannt. Bitte näher und gerade fotografieren.'; }
     else {
-      if (found.tips.length) { $('fTips').value = found.tips.map(t => t.n.join(' ') + (t.e.length ? ' | ' + t.e.join(' ') : '')).join('\n'); msg.textContent = found.tips.length + ' Tipp(s) erkannt – bitte mit der Quittung vergleichen, dann speichern.'; }
+      if (found.tips.length) { $('fTips').value = found.tips.map(t => t.n.join(' ') + (t.e.length ? ' | ' + t.e.join(' ') : '')).join('\n'); pkFromText(); pkRender(); msg.textContent = found.tips.length + ' Tipp(s) erkannt – bitte mit der Quittung vergleichen, dann speichern.'; }
       else msg.textContent = 'Keine vollständigen Tipps erkannt. Tipp: nur den Zahlenblock fotografieren, gutes Licht, Quittung flach.';
       if (found.los && $('fLos')) $('fLos').value = found.los; if (found.sz && $('fSz')) $('fSz').value = found.sz;
     }
@@ -279,7 +331,7 @@ async function enablePush() {
 }
 
 // ---------- Rendering & Events ----------
-let pendingGame = null;
+let pendingGame = null, pendingTicket = null;
 function route(keepScroll) {
   if (!S.settings.onboarded) { $('view').innerHTML = V.onboarding(); document.querySelectorAll('nav.tabs a').forEach(a => a.classList.remove('on')); return; }
   const v = (location.hash || '#heute').slice(1), name = V[v] && v !== 'onboarding' ? v : 'heute';
@@ -288,15 +340,23 @@ function route(keepScroll) {
   const el = $('view'), y = window.scrollY, same = el.dataset.v === name; el.dataset.v = name;
   const focusId = document.activeElement && document.activeElement.id, focusVal = focusId && document.activeElement.value;
   el.innerHTML = V[name]();
-  if (name === 'scheine') { const sel = $('fGame'), fld = $('fFields'); const upd = () => { fld.innerHTML = fieldsFor(sel.value); $('fDate').value = R.nextDraw(G[sel.value]); }; sel.onchange = upd; upd(); if (pendingGame) { sel.value = pendingGame; upd(); pendingGame = null; } $('scanFile').onchange = e => { if (e.target.files[0]) scan(e.target.files[0]); }; }
+  ticker();
+  if (name === 'scheine') { const sel = $('fGame'), fld = $('fFields');
+    const upd = (keep) => { fld.innerHTML = fieldsFor(sel.value); $('fDate').value = R.nextDraw(G[sel.value]); const ls = (S.settings.prefs.lastStake || {})[sel.value]; if (ls && !$('fStake').value) $('fStake').value = ls; if ($('fGroup') && S.settings.prefs.lastGroup) $('fGroup').value = S.settings.prefs.lastGroup; if (!keep) pkReset(); pkRender(); const ta = $('fTips'); if (ta) ta.addEventListener('input', () => { pkFromText(); pkRender(); }); };
+    sel.onchange = () => upd(); upd();
+    if (pendingGame) { sel.value = pendingGame; upd(); pendingGame = null; }
+    if (pendingTicket) { const t = pendingTicket; pendingTicket = null; sel.value = t.game; upd(true); pkReset(t.tips); pkRender(); if ($('fLos')) $('fLos').value = t.los || ''; if ($('fSz')) $('fSz').value = t.sz || ''; if ($('fS77')) $('fS77').checked = !!t.spiel77; if ($('fS6')) $('fS6').checked = !!t.super6; if ($('fP5')) $('fP5').checked = !!t.plus5; $('fStake').value = t.stake || ''; $('fLabel').value = t.label || ''; if ($('fGroup')) $('fGroup').value = t.group || ''; toast('Letzter Schein übernommen – Datum: nächste Ziehung'); }
+    $('scanFile').onchange = e => { if (e.target.files[0]) scan(e.target.files[0]); }; }
   if (name === 'ziehungen') { const sel = $('dGame'), fld = $('dFields'); const upd = () => { fld.innerHTML = dFieldsFor(sel.value); }; sel.onchange = upd; upd(); $('dDate').value = todayIso(); }
   if (same && keepScroll && focusId && $(focusId) && focusVal != null) { $(focusId).value = focusVal; $(focusId).focus(); }
   window.scrollTo(0, same && keepScroll ? y : 0);
 }
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-new],[data-del],[data-ddel],[data-gdel],[data-claim],button'); if (!t) return;
+  const t = e.target.closest('[data-new],[data-del],[data-ddel],[data-gdel],[data-claim],[data-repeat],[data-share],button'); if (!t) return;
   if (t.dataset.new) { pendingGame = t.dataset.new; return; }
+  if (t.dataset.repeat) { pendingTicket = S.tickets.find(x => x.id === t.dataset.repeat); location.hash = '#scheine'; route(); return; }
+  if (t.dataset.share) { const r = S.results.find(x => x.id === t.dataset.share); if (r) shareResult(r); return; }
   if (t.dataset.del) { const id = t.dataset.del; for (const r of S.results.filter(r => r.ticket === id)) await del('results', r.id); await del('tickets', id); route(true); return; }
   if (t.dataset.ddel) { const id = t.dataset.ddel; for (const r of S.results.filter(r => r.draw === id)) await del('results', r.id); await del('draws', id); route(true); return; }
   if (t.dataset.gdel) { await del('groups', t.dataset.gdel); route(true); return; }
@@ -311,9 +371,9 @@ document.addEventListener('click', async e => {
     case 'fetchNow': { t.disabled = true; try { const r = await fetch(API() + '/run', { method: 'POST', headers: { authorization: 'Bearer ' + S.settings.token } }); const j = await r.json(); toast(j.fetched && j.fetched.length ? 'Geholt: ' + j.fetched.join(', ') : 'Keine neue Ziehung gefunden' + (j.errors && j.errors.length ? ' (' + j.errors.length + ' Quellen ohne Treffer)' : '')); await sync(); } catch (err) { toast('Abruf fehlgeschlagen'); } t.disabled = false; break; }
     case 'pushOn': enablePush(); break;
     case 'pushTest': { const r = await fetch(API() + '/push/test', { method: 'POST', headers: { authorization: 'Bearer ' + S.settings.token } }); const j = await r.json(); toast(j.sent ? 'Testnachricht gesendet' : 'Keine Push-Anmeldung auf dem Server'); break; }
-    case 'setSave': S.settings.state = $('setState').value; S.settings.name = $('setName').value.trim(); await persistSettings(); pushAccount(); toast('Gespeichert'); break;
+    case 'setSave': S.settings.state = $('setState').value; S.settings.name = $('setName').value.trim(); S.settings.prefs.remind = $('setRemind').checked; await persistSettings(); pushAccount(); toast('Gespeichert'); break;
     case 'markseen': for (const r of live('results').filter(r => !r.seen)) { r.seen = true; await put('results', r); } route(); break;
-    case 'fQuick': { const g = G[$('fGame').value]; if (g.kind === 'suffix') $('fLos').value = quick(g.kind); else { const ta = $('fTips'); const typ = g.kind === 'keno' ? Math.max(2, Math.min(10, (ta.value.split('\n')[0].match(/\d+/g) || []).length || 8)) : 0; ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + quick(g.kind, typ); } break; }
+    case 'fQuick_legacy': { const g = G[$('fGame').value]; if (g.kind === 'suffix') $('fLos').value = quick(g.kind); else { const ta = $('fTips'); const typ = g.kind === 'keno' ? Math.max(2, Math.min(10, (ta.value.split('\n')[0].match(/\d+/g) || []).length || 8)) : 0; ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + quick(g.kind, typ); } break; }
     case 'fSave': {
       const g = G[$('fGame').value], base = { game: g.id, date: $('fDate').value, stake: +($('fStake').value || 0), label: $('fLabel').value.trim(), group: ($('fGroup') || {}).value || '', created: Date.now(), tips: [], los: '', sz: '' };
       if (g.kind === 'suffix') base.los = $('fLos').value.trim();
@@ -322,6 +382,7 @@ document.addEventListener('click', async e => {
       const weeks = +$('fWeeks').value; let date = base.date; const made = [];
       for (let i = 0; i < weeks; i++) { made.push(Object.assign({}, base, { id: uid(), date })); const nx = new Date(date + 'T12:00'); nx.setDate(nx.getDate() + 1); date = R.nextDraw(g, nx); }
       for (const tk of made) await put('tickets', tk);
+      S.settings.prefs.lastStake[g.id] = base.stake || ''; S.settings.prefs.lastGroup = base.group; await persistSettings();
       const n = await runChecks(); toast(n ? 'Gespeichert und sofort geprüft' : made.length > 1 ? made.length + ' Scheine gespeichert' : 'Schein gespeichert'); route(); break; }
     case 'dSave': {
       const g = G[$('dGame').value], d = { game: g.id, date: $('dDate').value, at: Date.now(), source: 'manuell', jackpot: ($('dJackpot').value || '').trim() };

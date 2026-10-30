@@ -24,6 +24,18 @@ export const SOURCES = {
   am: [{ url: 'https://www.aktion-mensch.de/lotterie/gewinnzahlen' }],
 };
 
+export const JACKPOT_SOURCES = {
+  lotto: [{ url: 'https://www.lotto.de/lotto-6aus49' }, { url: 'https://www.westlotto.de/lotto-6aus49' }, { url: 'https://www.lotto.de/lotto-6aus49/lottozahlen' }],
+  ej: [{ url: 'https://www.eurojackpot.de' }, { url: 'https://www.lotto.de/eurojackpot' }, { url: 'https://www.westlotto.de/eurojackpot' }],
+};
+// Jackpot-Betrag aus Seitentext: "Jackpot … 18 Mio. €" / "120 Millionen Euro" / "ca. 2.000.000 €"
+export function parseJackpot(text, game) {
+  const re = /jackpot[^\d]{0,80}?(\d{1,3}(?:[.,]\d{1,3})?)\s*(Mio\.?|Millionen|Mio €|Mio\. €)|(\d{1,3}(?:\.\d{3}){2,})\s*(?:€|EUR|Euro)/gi; let m, best = 0;
+  while ((m = re.exec(text))) { let v = m[1] ? parseFloat(m[1].replace(',', '.')) : parseInt(m[3].replace(/\./g, ''), 10) / 1e6; if (game === 'ej' && v > 120) continue; if (game === 'lotto' && v > 60) continue; if (v > best) best = v; }
+  if (!best) return '';
+  return (Number.isInteger(best) ? String(best) : best.toLocaleString('de-DE', { maximumFractionDigits: 1 })) + ' Mio. €';
+}
+
 export function htmlToText(html) {
   return String(html)
     .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')

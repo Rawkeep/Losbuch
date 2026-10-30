@@ -64,3 +64,24 @@ test('Scan: Zahlen aus OCR-Text je Spiel', async () => {
   const ej = f('1  03 17 22 38 45  04 09', 'ej'); assert.deepEqual(ej.tips[0], { n: [3, 17, 22, 38, 45], e: [4, 9] });
   const keno = f('Typ 8  5 12 19 27 33 41 56 68', 'keno'); assert.equal(keno.tips[0].n.length, 8);
 });
+
+test('Tippfeld: Zahlen antippen, Reihe hinzufügen, speichern', async () => {
+  const w = await boot(), d = w.document;
+  if (d.getElementById('obLocal')) { click(w, 'obLocal'); await tick(); }
+  w.location.hash = '#scheine'; w.dispatchEvent(new w.Event('hashchange')); await tick();
+  d.getElementById('fGame').value = 'ej'; d.getElementById('fGame').dispatchEvent(new w.Event('change')); await tick();
+  for (const n of [3, 17, 22, 38, 45]) d.querySelector(`[data-pk="n:${n}"]`).click();
+  for (const n of [4, 9]) d.querySelector(`[data-pk="e:${n}"]`).click();
+  assert.equal(d.querySelectorAll('.grid .ball.hit').length, 7);
+  d.querySelector('[data-pkact="add"]').click(); await tick();
+  d.querySelector('[data-pkact="quick"]').click(); await tick();
+  assert.equal(d.querySelectorAll('.pkrow').length, 2);
+  assert.match(d.getElementById('fTips').value, /^3 17 22 38 45 \| 4 9\n\d/);
+  d.getElementById('fDate').value = '2026-11-03'; d.getElementById('fLabel').value = 'PK-Test';
+  click(w, 'fSave'); await tick(150);
+  const card = [...d.querySelectorAll('#view .card')].find(c => c.textContent.includes('PK-Test'));
+  assert.equal(card.querySelectorAll('.balls').length, 2);
+  // Nochmal spielen übernimmt die Zahlen
+  card.querySelector('[data-repeat]').click(); await tick(150);
+  assert.match(d.getElementById('fTips').value, /^3 17 22 38 45 \| 4 9/);
+});

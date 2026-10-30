@@ -1,41 +1,69 @@
 # Losbuch – Lotterie-Begleiter für Deutschland
 
-Single-File-Web-App (HTML/JS, keine Abhängigkeiten) zum Begleiten deutscher Lotterien:
-LOTTO 6aus49 (mit Spiel 77 / SUPER 6), Eurojackpot, KENO (plus 5), GlücksSpirale,
-Deutsche Fernsehlotterie, Aktion Mensch.
+Progressive Web App (installierbar, offline-fähig) für LOTTO 6aus49 (mit Spiel 77 / SUPER 6),
+Eurojackpot, KENO (plus 5), GlücksSpirale, Deutsche Fernsehlotterie und Aktion Mensch.
 
-Losbuch spielt nichts automatisch. Es ist ein Begleiter: Spiele abonnieren, gespielte
-Scheine erfassen, Ziehungen eintragen (oder automatisch holen lassen), Gewinne nach
-Gewinnklassen prüfen, Bilanz sehen.
+Losbuch spielt nichts automatisch. Es begleitet: Spielquittung scannen oder Zahlen eintragen,
+Ziehungen werden automatisch geholt und ausgewertet, Gewinne samt Quote, Abholfrist und
+Anteil der Tippgemeinschaft stehen am nächsten Morgen auf dem Handy.
 
-## Betrieb
+Live: https://losbuch.f4991r.workers.dev
 
-| Variante | Speicher | Ziehungszahlen | Benachrichtigung |
-|---|---|---|---|
-| **Lokal** (`index.html` im Browser öffnen oder auf Cloudflare Pages legen) | Browser (localStorage), Gerätewechsel per Sicherungscode | manuell eintragen | keine |
-| **Claude-Artifact** (aktuelle Live-Version) | Artifact-Datenbank, auf allen Geräten gleich | täglich 22:40 Uhr automatisch (siehe `docs/abend-check.md`) | Push aufs Handy bei Ergebnis/Gewinn |
+## Funktionen
 
-Die App erkennt selbst, ob die Cloud-Datenbank verfügbar ist (`window.claude.use("db")`) und
-fällt sonst auf localStorage zurück.
+- **Scan**: Foto der Spielquittung → OCR (Tesseract, läuft komplett im Browser, keine Bild-Übertragung) → Tipps vorausgefüllt
+- **Automatischer Abend-Check**: Cloudflare Cron holt die offiziellen Zahlen (mehrere Quellen, Validierung), bewertet alle Scheine
+- **Web-Push**: Ergebnis je Ziehung, „GEWINN“-Hinweis ab Gewinnklasse 6 (LOTTO) / 8 (Eurojackpot) oder ab 100 €, Jackpot-Alarm ab 50 Mio. €
+- **Cloud-Sync** über Kopplungscode, offline-first (IndexedDB), Last-Writer-Wins
+- **Gewinne einlösen**: Abholfrist (13 Wochen) mit Countdown, „Eingelöst“-Haken
+- **Annahmeschluss** je Bundesland, nächste Ziehung, Dauerscheine (2/4/8 Ziehungen)
+- **Tippgemeinschaften** mit Anteilen → Gewinn wird automatisch aufgeteilt
+- **Bilanz**: Einsatz, Gewinn, Saldo, Trefferquote, Diagramm je Spiel
+- Vollständiger Gewinnplan: 9 LOTTO-, 12 Eurojackpot-Klassen, KENO-Typen 2–10, feste Quoten für Spiel 77, SUPER 6, plus 5, GlücksSpirale
 
-## Datenmodell
+## Architektur
 
-- `settings/main` → `{ active: { lotto: true, ej: true, … } }`
-- `tickets/<id>` → `{ game, date (YYYY-MM-DD), tips: [{n:[…], e:[…]}], sz, los, spiel77, super6, plus5, stake, label }`
-- `draws/<game>_<date>` → je Spiel `n`, `e`, `sz`, `spiel77`, `super6`, `plus5` oder `wins`, optional `quoten`, `jackpot`, `source`
-- `results/<ticketId>_<drawId>` → `{ hits: [{label, gk, text}], won, seen }`
+```
+public/            statische PWA (index.html, app.js, rules.js, sw.js, vendor/tesseract)
+src/worker.js      Cloudflare Worker: API, Cron, Push-Versand
+src/sources.js     Quellen + Text-Parser für Ziehungsergebnisse
+src/push.js        Web Push (VAPID + RFC 8291 aes128gcm) ohne Abhängigkeiten
+migrations/        D1-Schema
+tests/             node --test (Regeln, Parser, Push-Verschlüsselung, App-Smoke-Test mit jsdom)
+```
 
-## Auswertung
+`public/rules.js` ist die eine Quelle der Wahrheit für Gewinnklassen und Termine – Browser und
+Worker nutzen dieselbe Datei.
 
-Gewinnklassen: LOTTO 1–9, Eurojackpot 1–12, Spiel 77 / SUPER 6 / plus 5 über Endziffern,
-KENO über den Gewinnplan je Typ, Losnummern-Lotterien über die längste Endziffern-
-Übereinstimmung. Quoten werden angezeigt, wenn sie mit der Ziehung gespeichert wurden;
-verbindlich ist immer die Auszahlung des Anbieters.
+### API (Bearer-Token = Kopplungscode)
 
-## Roadmap
+| Route | Zweck |
+|---|---|
+| `POST /api/account` | Konto anlegen → `{id, token}` |
+| `GET/PATCH /api/account` | Einstellungen (Bundesland, aktive Spiele) |
+| `POST /api/sync?since=ts` | Dirty-Docs hochladen, Änderungen + Ziehungen seit `ts` zurück |
+| `GET /api/draws?from=` · `POST /api/draws` | Ziehungen lesen / manuell oder extern erfassen |
+| `GET /api/push/vapid` · `POST/DELETE /api/push/subscribe` · `POST /api/push/test` | Web-Push |
+| `POST /api/run?force=1` | Abend-Check sofort ausführen |
+| `GET /api/probe?game=lotto&date=` | Diagnose: was liefern die Quellen? |
 
-- Eigenes Backend ohne Claude: Cloudflare Worker + D1 (Sync), Cron-Scraper für Ziehungen, Web Push
-- PWA-Manifest + Service Worker für Homescreen-Installation
-- Spielgemeinschaften (geteilte Scheine, Anteile)
+### Deployment
 
-Spielteilnahme ab 18 Jahren. Hilfe bei problematischem Spielverhalten: BZgA 0800 1 37 27 00.
+Der Worker ist an dieses Repo gebunden (Workers Builds): jeder Push auf `main` deployt.
+Lokal: `npm test`, `npx wrangler dev`, `npx wrangler deploy`. Die D1-Datenbank `losbuch`
+ist in `wrangler.jsonc` eingetragen; Schema liegt in `migrations/`. VAPID-Schlüssel werden beim
+ersten Push-Aufruf erzeugt und in D1 (`kv`) abgelegt – keine Secrets nötig.
+
+Cron (UTC): `15 7,19,20,21,22 * * *` – holt nur, was fällig ist, und nimmt Lücken der letzten
+14 Tage nach, sofern Scheine existieren.
+
+### Quellen prüfen
+
+Die Ergebnisseiten ändern sich. `GET /api/probe?game=lotto` zeigt pro Quelle HTTP-Status,
+Textauszug und Parser-Ergebnis. Liefert keine Quelle, kann die Ziehung manuell oder per
+`POST /api/draws` (z. B. aus einem anderen Automatisierungs-Lauf) eingetragen werden.
+
+## Hinweise
+
+Spielteilnahme ab 18 Jahren. Alle Quoten und Fristen ohne Gewähr – maßgeblich ist der Anbieter.
+Hilfe bei problematischem Spielverhalten: BZgA 0800 1 37 27 00 (kostenlos, anonym).

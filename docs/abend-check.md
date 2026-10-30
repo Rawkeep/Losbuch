@@ -1,12 +1,17 @@
-# Abend-Check (Claude Scheduled Task)
+# Abend-Check
 
-Läuft täglich 22:40 Uhr (Europe/Berlin) als Claude-Aufgabe „Losbuch Abend-Check“.
+## Variante A – Cloudflare Cron (Standard)
+`src/worker.js` → `runFetch()`: läuft zu den Zeiten aus `wrangler.jsonc`, holt fällige Ziehungen
+über `src/sources.js`, schreibt `draws`, bewertet Scheine aller Konten mit `rules.js`, sendet Push
+(einmal je Konto und Ziehung, Tabelle `notified`).
 
-1. Liest `settings/main`, ermittelt die heute gezogenen aktiven Spiele und fehlende Ziehungen
-   der letzten 14 Tage, zu denen Scheine existieren.
-2. Holt die offiziellen Zahlen per Websuche (lotto.de, eurojackpot.de, keno.de, Lotterie-Seiten,
-   Tageszeitungen), möglichst von zwei Quellen bestätigt, inkl. Quoten und Jackpot.
-3. Schreibt `draws/<game>_<date>` (nie überschreiben).
-4. Wertet die Scheine aus und sendet nur bei Ergebnis/Gewinn oder Jackpot > 50 Mio. € eine Push-Nachricht.
+## Variante B – Claude Scheduled Task (Ergänzung)
+Eine Claude-Aufgabe kann Ziehungen per Websuche ermitteln und mit
+`POST /api/draws` (Bearer = Kopplungscode) in den Worker schreiben. Sie dient als zweite,
+unabhängige Quelle, falls die Parser an einer Seite scheitern.
 
-Dokumentformat siehe README. Die App prüft beim Öffnen zusätzlich selbst.
+## Dokumentformat `draws`
+- lotto: `{game,date,n[6],sz,spiel77,super6,quoten?,jackpot?}`
+- ej: `{game,date,n[5],e[2],quoten?,jackpot?}`
+- keno: `{game,date,n[20],plus5?}`
+- gs/fl/am: `{game,date,wins[],quoten?}`

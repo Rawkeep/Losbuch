@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "losbuch",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./public", "binding": "ASSETS", "not_found_handling": "single-page-application" },
+  "d1_databases": [{ "binding": "DB", "database_name": "losbuch", "database_id": "25788254-a0c2-434e-b04e-8b21dd7c0efa" }],
+  "triggers": { "crons": ["15 7,19,20,21,22 * * *"] },
+  "observability": { "enabled": true },
+  "vars": { "APP_NAME": "Losbuch" }
+}

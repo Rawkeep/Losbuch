@@ -1,5 +1,14 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15201a" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Losbuch">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Losbuch</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@500&display=swap">
 <style>
 /* Layout: one-column ledger, sticky top bar, bottom tab bar on phones; ticket numbers as "balls" */
@@ -61,6 +70,9 @@ label.f input,label.f select{width:100%}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
 @media (min-width:640px){nav.tabs{position:sticky;top:calc(env(safe-area-inset-top,0px) + 52px);bottom:auto;border-top:0;border-bottom:1px solid var(--line);margin-bottom:8px;padding:0;background:var(--bg)}.wrap{padding-bottom:40px}}
 </style>
+<style>html,body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
 
 <div class="wrap">
 <header class="top"><div><h1>Los<span>buch</span></h1><div class="sub">Lotterie-Begleiter · Deutschland</div></div><div class="muted" id="status"><span class="dot"></span>lokal</div></header>
@@ -274,3 +286,6 @@ loadLocal();route();
  db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.active=s.data().active||{};route()},()=>{});
 })();
 </script>
+
+</body>
+</html>

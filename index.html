@@ -1,0 +1,276 @@
+<title>Losbuch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-column ledger, sticky top bar, bottom tab bar on phones; ticket numbers as "balls" */
+:root{
+  --bg:#f3f1ea; --paper:#fffdf7; --ink:#1d2a22; --muted:#6b756e; --line:#dcd8cb;
+  --accent:#0f6b4a; --accent-ink:#ffffff; --gold:#d9a21b; --win:#c2410c; --warn:#b45309; --ok:#0f6b4a; --soft:#e9efe9;
+  --display:"Bricolage Grotesque","DM Sans",system-ui,sans-serif; --body:"DM Sans",system-ui,sans-serif; --mono:"DM Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15201a;--paper:#1c2922;--ink:#eef0e8;--muted:#9aa89f;--line:#2f4036;--accent:#5fc18f;--accent-ink:#0f1a14;--gold:#e6b83a;--win:#ffb27a;--warn:#f0b35a;--ok:#5fc18f;--soft:#233329;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15201a;--paper:#1c2922;--ink:#eef0e8;--muted:#9aa89f;--line:#2f4036;--accent:#5fc18f;--accent-ink:#0f1a14;--gold:#e6b83a;--win:#ffb27a;--warn:#f0b35a;--ok:#5fc18f;--soft:#233329;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:760px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 96px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:8px 10px;border-bottom:1px solid var(--line)}
+h1{font-family:var(--display);font-size:26px;margin:0;letter-spacing:-.01em}
+h1 span{color:var(--gold)}
+.sub{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+h2{font-family:var(--display);font-size:20px;margin:22px 0 10px;text-wrap:balance}
+h3{font-family:var(--display);font-size:16px;margin:0}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:var(--paper);border-top:1px solid var(--line);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs a{flex:1;text-align:center;padding:10px 4px 8px;font-size:12px;color:var(--muted);text-decoration:none;font-weight:500;border-top:2px solid transparent}
+nav.tabs a.on{color:var(--accent);border-top-color:var(--accent)}
+nav.tabs a b{display:block;font-size:17px;font-family:var(--display)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row>*{min-width:0}
+.grow{flex:1}
+.muted{color:var(--muted);font-size:13px}
+.pill{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--soft);color:var(--ink);white-space:nowrap}
+.pill.win{background:var(--win);color:#fff}
+.pill.due{background:var(--warn);color:#fff}
+.pill.ok{background:var(--ok);color:var(--accent-ink)}
+.ball{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);font-family:var(--mono);font-size:13px;background:var(--paper)}
+.ball.hit{background:var(--gold);border-color:var(--gold);color:#1d2a22;font-weight:600}
+.ball.sz{border-style:dashed}
+.balls{display:flex;flex-wrap:wrap;gap:5px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer;text-decoration:none}
+button.p{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.s{padding:5px 10px;font-size:13px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-width:100%}
+textarea{width:100%;font-family:var(--mono);font-size:14px;min-height:72px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+label.f input,label.f select{width:100%}
+.check{display:flex;align-items:center;gap:8px;font-size:14px}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.game{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.game .sched{font-size:13px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.empty{color:var(--muted);font-size:14px;padding:16px;border:1px dashed var(--line);border-radius:10px;text-align:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(70px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;z-index:9;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+.hint{font-size:12px;color:var(--muted);line-height:1.4}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
+.dot.on{background:var(--ok)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+@media (min-width:640px){nav.tabs{position:sticky;top:calc(env(safe-area-inset-top,0px) + 52px);bottom:auto;border-top:0;border-bottom:1px solid var(--line);margin-bottom:8px;padding:0;background:var(--bg)}.wrap{padding-bottom:40px}}
+</style>
+
+<div class="wrap">
+<header class="top"><div><h1>Los<span>buch</span></h1><div class="sub">Lotterie-Begleiter · Deutschland</div></div><div class="muted" id="status"><span class="dot"></span>lokal</div></header>
+<nav class="tabs">
+  <a href="#heute" data-v="heute"><b>Heute</b>Überblick</a>
+  <a href="#spiele" data-v="spiele"><b>Spiele</b>Katalog</a>
+  <a href="#scheine" data-v="scheine"><b>Scheine</b>Meine Tipps</a>
+  <a href="#ziehungen" data-v="ziehungen"><b>Ziehungen</b>Ergebnisse</a>
+  <a href="#sync" data-v="sync"><b>Sync</b>Sichern</a>
+</nav>
+<main id="view"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Katalog der Spiele ----------
+const GAMES = [
+ {id:'lotto', name:'LOTTO 6aus49', kind:'lotto', days:[3,6], time:'18:25 / 19:25', price:'1,20 € je Tipp + Gebühr', rule:'6 Zahlen aus 49 + Superzahl (letzte Ziffer der Losnummer). 9 Gewinnklassen.', extras:['Spiel 77','SUPER 6'], drawDays:'Mi & Sa'},
+ {id:'ej', name:'Eurojackpot', kind:'ej', days:[2,5], time:'ca. 21:00', price:'2,00 € je Tipp + Gebühr', rule:'5 aus 50 + 2 Eurozahlen aus 12. 12 Gewinnklassen, Jackpot bis 120 Mio. €.', extras:[], drawDays:'Di & Fr'},
+ {id:'keno', name:'KENO', kind:'keno', days:[0,1,2,3,4,5,6], time:'19:10', price:'1 / 2 / 5 / 10 € je Tipp', rule:'Typ 2–10: so viele Zahlen aus 70 tippen, 20 werden gezogen. Fester Gewinnplan je Typ.', extras:['plus 5'], drawDays:'täglich'},
+ {id:'gs', name:'GlücksSpirale', kind:'suffix', days:[6], time:'Samstag', price:'5,00 € je Los + Gebühr', rule:'7-stellige Losnummer. Gewinn nach übereinstimmenden Endziffern (1–7), GK7 = Sofortrente.', extras:[], drawDays:'Sa'},
+ {id:'fl', name:'Deutsche Fernsehlotterie', kind:'suffix', days:[0], time:'Sonntag', price:'Lose ab 5 € / Monat', rule:'Soziallotterie. Gewinn nach Endziffern der Losnummer, Zusatzziehungen für Jahreslose.', extras:[], drawDays:'So'},
+ {id:'am', name:'Aktion Mensch', kind:'suffix', days:[2], time:'Dienstag', price:'Lose ab 5 € / Monat', rule:'Soziallotterie. Wöchentliche Ziehung, Gewinn nach Endziffern der Losnummer.', extras:[], drawDays:'Di'},
+];
+const G = Object.fromEntries(GAMES.map(g=>[g.id,g]));
+
+// ---------- Zustand + Speicher (Cloud-DB wenn vorhanden, sonst lokal) ----------
+const KEY='losbuch.v2';
+let S={active:{lotto:true,ej:true}, tickets:[], draws:[], results:[]};
+let DB=null, ready=false;
+function loadLocal(){try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r));}catch(e){}}
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+// Schreibfunktionen: ein Dokument je Schein / Ziehung / Ergebnis
+async function put(coll,obj){if(DB){try{await DB.collection(coll).doc(obj.id).set(obj)}catch(e){toast('Speichern fehlgeschlagen: '+(e.code||''))}}else{const a=S[coll];const i=a.findIndex(x=>x.id===obj.id);if(i>=0)a[i]=obj;else a.push(obj);saveLocal()}}
+async function del(coll,id){if(DB){try{await DB.collection(coll).doc(id).delete()}catch(e){}}else{S[coll]=S[coll].filter(x=>x.id!==id);saveLocal()}}
+async function putSettings(){if(DB){try{await DB.doc('settings/main').set({active:S.active})}catch(e){}}else saveLocal()}
+const uid=()=>Math.random().toString(36).slice(2,9);
+const fmtD=d=>new Date(d+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+const iso=d=>d.toISOString().slice(0,10);
+function nextDraw(g,from){const d=new Date(from||Date.now());for(let i=0;i<8;i++){const t=new Date(d);t.setDate(d.getDate()+i);if(g.days.includes(t.getDay())&&(i>0||t.getHours()<18))return iso(t);}return iso(d)}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------- Tipps parsen / generieren ----------
+const nums=s=>(String(s||'').match(/\d+/g)||[]).map(Number);
+function parseTips(txt){return txt.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{const [a,b]=l.split('|');return {n:nums(a),e:b?nums(b):[]}})}
+function pick(k,max){const s=new Set();while(s.size<k)s.add(1+Math.floor(Math.random()*max));return [...s].sort((a,b)=>a-b)}
+function quick(kind,typ){
+ if(kind==='lotto')return pick(6,49).join(' ');
+ if(kind==='ej')return pick(5,50).join(' ')+' | '+pick(2,12).join(' ');
+ if(kind==='keno')return pick(typ||8,70).join(' ');
+ return String(Math.floor(Math.random()*1e7)).padStart(7,'0');
+}
+
+// ---------- Auswertung ----------
+const inter=(a,b)=>(a||[]).filter(x=>(b||[]).includes(x));
+function sufMatch(a,b){a=String(a||'');b=String(b||'');let n=0;while(n<a.length&&n<b.length&&a[a.length-1-n]===b[b.length-1-n])n++;return n}
+function evalTicket(t,d){
+ const g=G[t.game], out=[], q=d.quoten||{};
+ const qq=gk=>gk&&q[gk]?' · '+q[gk]:'';
+ if(g.kind==='lotto'){
+  (t.tips||[]).forEach((tp,i)=>{const h=inter(tp.n,d.n).length, sz=t.sz!==''&&t.sz!=null&&String(t.sz)===String(d.sz);
+   const gk={'6t':1,'6f':2,'5t':3,'5f':4,'4t':5,'4f':6,'3t':7,'3f':8,'2t':9}[h+(sz?'t':'f')];
+   out.push({label:'Tipp '+(i+1),gk,text:h+' Richtige'+(sz?' + Superzahl':'')+(gk?' → Gewinnklasse '+gk+qq(gk):'')})});
+  if(t.spiel77&&d.spiel77){const m=sufMatch(t.los,d.spiel77);out.push({label:'Spiel 77',gk:m?8-m:null,text:m?m+' Endziffern → Gewinnklasse '+(8-m):'kein Treffer'})}
+  if(t.super6&&d.super6){const m=sufMatch(t.los,d.super6);out.push({label:'SUPER 6',gk:m?7-m:null,text:m?m+' Endziffern → Gewinnklasse '+(7-m):'kein Treffer'})}
+ }else if(g.kind==='ej'){
+  const tbl={'52':1,'51':2,'50':3,'42':4,'41':5,'32':6,'40':7,'22':8,'31':9,'30':10,'12':11,'21':12};
+  (t.tips||[]).forEach((tp,i)=>{const h=inter(tp.n,d.n).length,e=inter(tp.e,d.e).length,gk=tbl[''+h+e];out.push({label:'Tipp '+(i+1),gk,text:h+' + '+e+' Richtige'+(gk?' → Gewinnklasse '+gk+qq(gk):'')})});
+ }else if(g.kind==='keno'){
+  const win={10:[10,9,8,7,6,5,0],9:[9,8,7,6,5,0],8:[8,7,6,5,4,0],7:[7,6,5,4],6:[6,5,4,3],5:[5,4,3],4:[4,3,2],3:[3,2],2:[2]};
+  (t.tips||[]).forEach((tp,i)=>{const typ=tp.n.length,h=inter(tp.n,d.n).length,w=(win[typ]||[]).includes(h);out.push({label:'Tipp '+(i+1)+' (Typ '+typ+')',gk:w?h:null,text:h+' Treffer'+(w?' → Gewinn laut Gewinnplan':'')})});
+  if(t.plus5&&d.plus5){const m=sufMatch(t.los,d.plus5);out.push({label:'plus 5',gk:m||null,text:m?m+' Endziffern richtig':'kein Treffer'})}
+ }else{
+  let best=0,bw='';(d.wins||[]).forEach(w=>{const m=sufMatch(t.los,w);if(m>best){best=m;bw=w}});
+  out.push({label:'Los '+t.los,gk:best||null,text:best?best+' Endziffern stimmen mit '+bw+' überein'+(g.id==='gs'?' → Gewinnklasse '+best:'')+qq(best):'kein Treffer'});
+ }
+ return out;
+}
+let checking=false;
+async function runChecks(){
+ if(checking)return 0;checking=true;let n=0;
+ try{for(const d of S.draws){for(const t of S.tickets.filter(t=>t.game===d.game&&t.date===d.date)){
+  const id=t.id+'_'+d.id;if(S.results.some(r=>r.id===id))continue;
+  const hits=evalTicket(t,d);const r={id,ticket:t.id,draw:d.id,hits,won:hits.some(h=>h.gk),at:Date.now(),seen:false};
+  if(!DB)S.results.push(r);await put('results',r);n++;}}}finally{checking=false}
+ return n;
+}
+
+// ---------- Ansichten ----------
+const V={};
+V.heute=()=>{
+ const today=iso(new Date()), act=GAMES.filter(g=>S.active[g.id]);
+ const unseen=S.results.filter(r=>!r.seen).sort((a,b)=>b.at-a.at);
+ const due=S.tickets.filter(t=>t.date<=today&&!S.draws.some(d=>d.game===t.game&&d.date===t.date));
+ const dueKeys=[...new Set(due.map(t=>t.game+'|'+t.date))];
+ const open=S.tickets.filter(t=>t.date>today);
+ let h='';
+ if(unseen.length){h+='<h2>Neue Ergebnisse</h2><div class="stack">'+unseen.map(r=>resCard(r)).join('')+'</div><div class="row" style="margin-top:8px"><button class="s" id="markseen">Alle als gelesen markieren</button></div>'}
+ h+='<h2>Was ansteht</h2><div class="stack">';
+ if(dueKeys.length)h+=dueKeys.map(k=>{const [g,d]=k.split('|');return '<div class="card"><div class="row"><span class="pill due">Ergebnis fehlt</span><b>'+G[g].name+'</b><span class="muted">'+fmtD(d)+'</span></div><div class="muted">'+due.filter(t=>t.game+'|'+t.date===k).length+' Schein(e) warten. '+(DB?'Der Abend-Check holt die Zahlen automatisch; du kannst sie auch selbst eintragen.':'Zahlen bitte unter Ziehungen eintragen.')+'</div><div><a class="btn" href="#ziehungen">Ergebnis eintragen</a></div></div>'}).join('');
+ if(!act.length)h+='<div class="empty">Noch kein Spiel abonniert. Unter <a href="#spiele">Spiele</a> ankreuzen, was dich interessiert.</div>';
+ h+=act.map(g=>{const nd=nextDraw(g),cnt=open.filter(t=>t.game===g.id&&t.date===nd).length,days=Math.round((new Date(nd+'T12:00')-new Date(today+'T12:00'))/864e5);
+  return '<div class="card"><div class="row"><b>'+g.name+'</b><span class="pill">'+(days===0?'heute':days===1?'morgen':'in '+days+' Tagen')+'</span><span class="grow"></span><span class="muted">'+fmtD(nd)+' · '+g.time+'</span></div><div class="row"><span class="muted">'+(cnt?cnt+' Schein(e) für diese Ziehung':'Noch kein Schein für diese Ziehung')+'</span><span class="grow"></span><a class="btn" href="#scheine" data-new="'+g.id+'">+ Schein</a></div></div>'}).join('');
+ h+='</div>';
+ const won=S.results.filter(r=>r.won).length;
+ h+='<h2>Bilanz</h2><div class="card"><div class="kv"><span class="muted">Scheine</span><b class="num">'+S.tickets.length+'</b><span class="muted">Geprüft</span><b class="num">'+S.results.length+'</b><span class="muted">Mit Gewinn</span><b class="num">'+won+'</b><span class="muted">Einsatz gesamt</span><b class="num">'+S.tickets.reduce((a,t)=>a+(+t.stake||0),0).toFixed(2).replace('.',',')+' €</b></div></div>';
+ return h;
+};
+function resCard(r){const t=S.tickets.find(x=>x.id===r.ticket),d=S.draws.find(x=>x.id===r.draw);if(!t||!d)return '';
+ return '<div class="card"><div class="row"><span class="pill '+(r.won?'win':'')+'">'+(r.won?'Gewinn':'Kein Gewinn')+'</span><b>'+G[t.game].name+'</b><span class="muted">'+fmtD(d.date)+'</span>'+(t.label?'<span class="muted">· '+esc(t.label)+'</span>':'')+'</div>'+tipHtml(t,r)+
+ r.hits.map(x=>'<div class="row"><span class="muted" style="min-width:90px">'+esc(x.label)+'</span><span>'+esc(x.text)+'</span></div>').join('')+
+ (r.won?'<div class="hint">Quote beim Anbieter gegenprüfen und den Schein innerhalb der Frist einlösen.</div>':'')+'</div>'}
+
+V.spiele=()=>'<h2>Welche Spiele begleite ich?</h2><div class="stack">'+GAMES.map(g=>'<div class="card"><div class="game"><label class="check"><input type="checkbox" data-act="'+g.id+'" '+(S.active[g.id]?'checked':'')+'></label><div><h3>'+g.name+'</h3><div class="sched">'+g.drawDays+' · '+g.time+' · '+g.price+'</div></div><span class="pill">'+(g.kind==='suffix'?'Losnummer':'Zahlenlotto')+'</span></div><div class="muted">'+g.rule+(g.extras.length?' Zusatz: '+g.extras.join(', ')+'.':'')+'</div></div>').join('')+'</div><p class="hint">Annahmeschluss ist je Bundesland verschieden (meist 1–2 Stunden vor der Ziehung). Spielteilnahme ab 18 Jahren. Losbuch spielt nichts automatisch; abgegeben wird beim Anbieter.</p>';
+
+V.scheine=()=>{
+ const act=GAMES.filter(g=>S.active[g.id]);
+ let h='<h2>Neuer Schein</h2><div class="card" id="newform"><div class="row"><label class="f grow">Spiel<select id="fGame">'+(act.length?act:GAMES).map(g=>'<option value="'+g.id+'">'+g.name+'</option>').join('')+'</select></label><label class="f">Ziehung<input type="date" id="fDate"></label><label class="f" style="width:110px">Einsatz €<input type="number" step="0.01" id="fStake" placeholder="0,00"></label></div><div id="fFields"></div><div class="row"><label class="f grow">Notiz<input id="fLabel" placeholder="z. B. Tippgemeinschaft, Kiosk Bahnhofstr."></label><label class="f" style="width:130px">Dauerschein<select id="fWeeks"><option value="1">nur diese Ziehung</option><option value="2">2 Ziehungen</option><option value="4">4 Ziehungen</option><option value="8">8 Ziehungen</option></select></label></div><div class="row"><button class="p" id="fSave">Schein speichern</button><button id="fQuick">Quicktipp einfügen</button></div></div>';
+ const today=iso(new Date());
+ const list=[...S.tickets].sort((a,b)=>b.date.localeCompare(a.date));
+ h+='<h2>Meine Scheine <span class="muted num">'+list.length+'</span></h2><div class="stack">'+(list.length?list.map(t=>{const r=S.results.find(x=>x.ticket===t.id);const st=r?(r.won?'<span class="pill win">Gewinn</span>':'<span class="pill">Geprüft</span>'):(t.date<today?'<span class="pill due">Ergebnis fehlt</span>':'<span class="pill ok">Läuft</span>');
+  return '<div class="card"><div class="row">'+st+'<b>'+G[t.game].name+'</b><span class="muted">'+fmtD(t.date)+'</span><span class="grow"></span><span class="num muted">'+(t.stake?(+t.stake).toFixed(2).replace('.',',')+' €':'')+'</span><button class="s" data-del="'+t.id+'">✕</button></div>'+tipHtml(t,r)+(t.label?'<div class="muted">'+esc(t.label)+'</div>':'')+'</div>'}).join(''):'<div class="empty">Noch keine Scheine. Oben anlegen, nachdem du beim Anbieter gespielt hast.</div>')+'</div>';
+ return h;
+};
+function tipHtml(t,r){const g=G[t.game],d=r&&S.draws.find(x=>x.id===r.draw);let h='';
+ if(g.kind==='suffix'){return '<div class="row"><span class="muted">Losnummer</span><span class="num" style="font-size:18px;letter-spacing:.12em">'+esc(t.los)+'</span></div>'}
+ h+=(t.tips||[]).map(tp=>'<div class="balls">'+tp.n.map(n=>'<span class="ball'+(d&&(d.n||[]).includes(n)?' hit':'')+'">'+n+'</span>').join('')+(tp.e.length?'<span class="muted" style="align-self:center">+</span>'+tp.e.map(n=>'<span class="ball sz'+(d&&(d.e||[]).includes(n)?' hit':'')+'">'+n+'</span>').join(''):'')+'</div>').join('');
+ const ex=[];if(g.kind==='lotto'){if(t.sz!==''&&t.sz!=null)ex.push('Superzahl '+t.sz);if(t.spiel77)ex.push('Spiel 77');if(t.super6)ex.push('SUPER 6')}if(g.kind==='keno'&&t.plus5)ex.push('plus 5');if(t.los)ex.push('Losnr. '+t.los);
+ return h+(ex.length?'<div class="muted num">'+esc(ex.join(' · '))+'</div>':'')}
+function fieldsFor(id){const g=G[id];
+ if(g.kind==='suffix')return '<label class="f">Losnummer (7-stellig)<input id="fLos" inputmode="numeric" maxlength="12" placeholder="0123456"></label>';
+ let h='<label class="f">Tipps (eine Zeile je Tipp'+(g.kind==='ej'?', Eurozahlen nach „|“':g.kind==='keno'?', 2–10 Zahlen':'')+')<textarea id="fTips" placeholder="'+(g.kind==='ej'?'3 17 22 38 45 | 4 9':g.kind==='keno'?'5 12 19 27 33 41 56 68':'3 11 19 27 34 42')+'"></textarea></label>';
+ if(g.kind==='lotto')h+='<div class="row"><label class="f" style="width:110px">Superzahl<input id="fSz" inputmode="numeric" maxlength="1" placeholder="0–9"></label><label class="f grow">Losnummer<input id="fLos" inputmode="numeric" maxlength="7" placeholder="7-stellig"></label><label class="check"><input type="checkbox" id="fS77">Spiel 77</label><label class="check"><input type="checkbox" id="fS6">SUPER 6</label></div>';
+ if(g.kind==='keno')h+='<div class="row"><label class="f grow">Losnummer<input id="fLos" inputmode="numeric" maxlength="7" placeholder="7-stellig"></label><label class="check"><input type="checkbox" id="fP5">plus 5</label></div>';
+ return h}
+
+V.ziehungen=()=>{
+ let h='<h2>Ziehung eintragen</h2><div class="card"><div class="row"><label class="f grow">Spiel<select id="dGame">'+GAMES.map(g=>'<option value="'+g.id+'">'+g.name+'</option>').join('')+'</select></label><label class="f">Datum<input type="date" id="dDate"></label></div><div id="dFields"></div><div class="row"><button class="p" id="dSave">Speichern &amp; Scheine prüfen</button></div><p class="hint">'+(DB?'Normalerweise trägt der automatische Abend-Check die Zahlen ein. Manuell nur, wenn etwas fehlt oder du es sofort wissen willst.':'Gezogene Zahlen von lotto.de, eurojackpot.de, keno.de bzw. der Lotterie abtippen.')+'</p></div>';
+ const list=[...S.draws].sort((a,b)=>b.date.localeCompare(a.date));
+ h+='<h2>Erfasste Ziehungen</h2><div class="stack">'+(list.length?list.map(d=>{const g=G[d.game]||{name:d.game},rs=S.results.filter(r=>r.draw===d.id);
+  return '<div class="card"><div class="row"><b>'+esc(g.name)+'</b><span class="muted">'+fmtD(d.date)+'</span>'+(d.source==='auto'?'<span class="pill ok">automatisch</span>':'')+'<span class="grow"></span><span class="muted">'+rs.length+' Schein(e), '+rs.filter(r=>r.won).length+' mit Gewinn</span><button class="s" data-ddel="'+d.id+'">✕</button></div>'+(d.n?'<div class="balls">'+d.n.map(n=>'<span class="ball hit">'+n+'</span>').join('')+(d.e&&d.e.length?'<span class="muted" style="align-self:center">+</span>'+d.e.map(n=>'<span class="ball hit sz">'+n+'</span>').join(''):'')+'</div>':'')+'<div class="muted num">'+esc([d.sz!==undefined&&d.sz!==''?'Superzahl '+d.sz:'',d.spiel77?'Spiel 77: '+d.spiel77:'',d.super6?'SUPER 6: '+d.super6:'',d.plus5?'plus 5: '+d.plus5:'',d.wins?'Gewinnzahlen: '+d.wins.join(', '):'',d.jackpot?'Jackpot: '+d.jackpot:''].filter(Boolean).join(' · '))+'</div></div>'}).join(''):'<div class="empty">Noch keine Ziehung erfasst.</div>')+'</div>';
+ return h};
+function dFieldsFor(id){const g=G[id];
+ if(g.kind==='suffix')return '<label class="f">Gewinnzahlen / Endziffern (durch Komma oder Zeile getrennt)<textarea id="dWins" placeholder="z. B. 7, 34, 912, 4458, 56521, 2837714"></textarea></label>';
+ let h='<label class="f">Gezogene Zahlen'+(g.kind==='ej'?' (5 Zahlen | 2 Eurozahlen)':g.kind==='keno'?' (20 Zahlen)':' (6 Zahlen)')+'<textarea id="dNums" placeholder="'+(g.kind==='ej'?'3 17 22 38 45 | 4 9':g.kind==='keno'?'2 5 9 14 …':'3 11 19 27 34 42')+'"></textarea></label>';
+ if(g.kind==='lotto')h+='<div class="row"><label class="f" style="width:110px">Superzahl<input id="dSz" inputmode="numeric" maxlength="1"></label><label class="f grow">Spiel 77<input id="dS77" inputmode="numeric" maxlength="7"></label><label class="f grow">SUPER 6<input id="dS6" inputmode="numeric" maxlength="6"></label></div>';
+ if(g.kind==='keno')h+='<label class="f">plus 5<input id="dP5" inputmode="numeric" maxlength="5"></label>';
+ return h}
+
+V.sync=()=>'<h2>Sichern &amp; synchronisieren</h2><div class="card"><p class="muted" style="margin:0">'+(DB?'<b>Cloud-Sync aktiv.</b> Scheine, Ziehungen und Ergebnisse liegen in der Datenbank dieser Seite und sind auf jedem Gerät gleich, auf dem du angemeldet bist. Der Sicherungscode ist zusätzlich als Backup gedacht.':'<b>Nur lokal.</b> Alle Daten liegen in diesem Browser. Für ein zweites Gerät: Sicherungscode kopieren und dort einfügen.')+'</p><div class="row"><button class="p" id="sExport">Sicherungscode erzeugen</button><button id="sCopy">Kopieren</button></div><textarea id="sBox" placeholder="Hier erscheint der Sicherungscode – oder einen Code von einem anderen Gerät einfügen."></textarea><div class="row"><button id="sImport">Code einspielen (zusammenführen)</button><button id="sWipe">Alles löschen</button></div><div id="sMsg" class="hint"></div></div>';
+
+// ---------- Rendering & Events ----------
+function route(){const v=(location.hash||'#heute').slice(1);const name=V[v]?v:'heute';document.querySelectorAll('nav.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.v===name));const el=document.getElementById('view');
+ const scroll=window.scrollY,same=el.dataset.v===name;el.dataset.v=name;el.innerHTML=V[name]();
+ if(name==='scheine'){const sel=el.querySelector('#fGame'),fld=el.querySelector('#fFields');const upd=()=>{fld.innerHTML=fieldsFor(sel.value);el.querySelector('#fDate').value=nextDraw(G[sel.value])};sel.onchange=upd;upd();
+  if(pendingGame){sel.value=pendingGame;upd();pendingGame=null}}
+ if(name==='ziehungen'){const sel=el.querySelector('#dGame'),fld=el.querySelector('#dFields');const upd=()=>{fld.innerHTML=dFieldsFor(sel.value)};sel.onchange=upd;upd();el.querySelector('#dDate').value=iso(new Date())}
+ window.scrollTo(0,same?scroll:0)}
+let pendingGame=null;
+const $=(id)=>document.getElementById(id);
+document.addEventListener('click',async e=>{
+ const t=e.target.closest('[data-new],[data-del],[data-ddel],button');if(!t)return;
+ if(t.dataset.new){pendingGame=t.dataset.new;return}
+ if(t.dataset.del){const id=t.dataset.del;for(const r of S.results.filter(r=>r.ticket===id))await del('results',r.id);await del('tickets',id);if(!DB)route();return}
+ if(t.dataset.ddel){const id=t.dataset.ddel;for(const r of S.results.filter(r=>r.draw===id))await del('results',r.id);await del('draws',id);if(!DB)route();return}
+ switch(t.id){
+  case 'markseen':for(const r of S.results.filter(r=>!r.seen)){r.seen=true;await put('results',r)}route();break;
+  case 'fQuick':{const g=G[$('fGame').value];if(g.kind==='suffix'){$('fLos').value=quick(g.kind)}else{const ta=$('fTips');const typ=g.kind==='keno'?Math.max(2,Math.min(10,(ta.value.split('\n')[0].match(/\d+/g)||[]).length||8)):0;ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+quick(g.kind,typ)};break}
+  case 'fSave':{const g=G[$('fGame').value],base={game:g.id,date:$('fDate').value,stake:$('fStake').value,label:$('fLabel').value.trim(),created:Date.now(),tips:[],los:'',sz:''};
+   if(!base.date){toast('Bitte Ziehungsdatum wählen');return}
+   if(g.kind==='suffix'){base.los=$('fLos').value.trim();if(!base.los){toast('Losnummer fehlt');return}}
+   else{base.tips=parseTips($('fTips').value);const need=g.kind==='lotto'?6:g.kind==='ej'?5:null;
+    const bad=base.tips.find(tp=>need?tp.n.length!==need||(g.kind==='ej'&&tp.e.length!==2):tp.n.length<2||tp.n.length>10);
+    if(!base.tips.length||bad){toast('Tipp unvollständig – Zahlen prüfen');return}
+    base.los=($('fLos')||{}).value||'';if(g.kind==='lotto'){base.sz=$('fSz').value.trim();if(base.sz===''&&base.los)base.sz=base.los.slice(-1);base.spiel77=$('fS77').checked;base.super6=$('fS6').checked}
+    if(g.kind==='keno')base.plus5=$('fP5').checked;}
+   const weeks=+$('fWeeks').value;let date=base.date;const made=[];
+   for(let i=0;i<weeks;i++){const tk=Object.assign({},base,{id:uid(),date});made.push(tk);const nx=new Date(date+'T12:00');nx.setDate(nx.getDate()+1);date=nextDraw(g,nx)}
+   for(const tk of made){if(!DB)S.tickets.push(tk);await put('tickets',tk)}
+   const n=await runChecks();toast(n?'Gespeichert und sofort geprüft':made.length>1?made.length+' Scheine gespeichert':'Schein gespeichert');route();break}
+  case 'dSave':{const g=G[$('dGame').value],d={game:g.id,date:$('dDate').value,at:Date.now(),source:'manuell'};
+   if(!d.date){toast('Datum fehlt');return}d.id=d.game+'_'+d.date;
+   if(g.kind==='suffix'){d.wins=($('dWins').value.match(/\d+/g)||[]);if(!d.wins.length){toast('Gewinnzahlen fehlen');return}}
+   else{const [a,b]=$('dNums').value.split('|');d.n=nums(a);d.e=b?nums(b):[];const need=g.kind==='lotto'?6:g.kind==='ej'?5:20;
+    if(d.n.length!==need||(g.kind==='ej'&&d.e.length!==2)){toast('Erwartet: '+need+' Zahlen'+(g.kind==='ej'?' + 2 Eurozahlen':''));return}
+    if(g.kind==='lotto'){d.sz=$('dSz').value.trim();d.spiel77=$('dS77').value.trim();d.super6=$('dS6').value.trim()}if(g.kind==='keno')d.plus5=$('dP5').value.trim()}
+   for(const r of S.results.filter(r=>r.draw===d.id))await del('results',r.id);
+   if(!DB){S.draws=S.draws.filter(x=>x.id!==d.id);S.draws.push(d)}await put('draws',d);const n=await runChecks();toast(n?n+' Schein(e) geprüft':'Ziehung gespeichert – kein passender Schein');location.hash=n?'#heute':'#ziehungen';route();break}
+  case 'sExport':$('sBox').value=btoa(unescape(encodeURIComponent(JSON.stringify(S))));$('sMsg').textContent='Code erzeugt: '+new Date().toLocaleString('de-DE');break;
+  case 'sCopy':{const v=$('sBox').value;if(!v){toast('Erst Code erzeugen');break}navigator.clipboard.writeText(v).then(()=>toast('Kopiert')).catch(()=>{$('sBox').select();toast('Text markiert – jetzt kopieren')});break}
+  case 'sImport':{try{const o=JSON.parse(decodeURIComponent(escape(atob($('sBox').value.trim()))));let c=0;
+    for(const coll of ['tickets','draws','results'])for(const x of (o[coll]||[]))if(!S[coll].some(y=>y.id===x.id)){if(!DB)S[coll].push(x);await put(coll,x);c++}
+    S.active=Object.assign({},o.active||{},S.active);await putSettings();await runChecks();$('sMsg').textContent=c+' Einträge übernommen.';toast('Eingespielt');route()}catch(e){$('sMsg').textContent='Code konnte nicht gelesen werden.'}break}
+  case 'sWipe':{if(t.dataset.armed){for(const coll of ['results','tickets','draws'])for(const x of [...S[coll]])await del(coll,x.id);S.active={};await putSettings();if(!DB){S={active:{},tickets:[],draws:[],results:[]};saveLocal()}route();toast('Alles gelöscht')}else{t.dataset.armed='1';t.textContent='Wirklich alles löschen? Nochmal tippen';t.style.color='var(--win)'}break}
+ }
+});
+document.addEventListener('change',e=>{if(e.target.dataset.act){S.active[e.target.dataset.act]=e.target.checked;putSettings()}});
+window.addEventListener('hashchange',route);
+
+// ---------- Start: Cloud-DB anbinden, sonst lokal ----------
+loadLocal();route();
+(async()=>{
+ const db=await (window.claude&&window.claude.use?window.claude.use('db'):Promise.resolve(null));
+ if(!db){await runChecks();route();return}
+ DB=db;S={active:{lotto:true,ej:true},tickets:[],draws:[],results:[]};
+ $('status').innerHTML='<span class="dot on"></span>Cloud-Sync';
+ let pending=3;const done=()=>{if(--pending<=0&&!ready){ready=true;runChecks().then(n=>{route()})}};
+ const sub=(coll)=>db.collection(coll).onSnapshot(snap=>{S[coll]=snap.docs.filter(d=>d.exists).map(d=>Object.assign({id:d.id},d.data()));if(!ready)done();else{runChecks();route()}},e=>{$('status').innerHTML='<span class="dot"></span>Sync-Fehler';if(!ready)done()});
+ sub('tickets');sub('draws');sub('results');
+ db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.active=s.data().active||{};route()},()=>{});
+})();
+</script>
